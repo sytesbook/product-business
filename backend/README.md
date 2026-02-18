@@ -17,7 +17,8 @@ backend/
 ├── composer.json                # Root orchestrator with monorepo scripts
 ├── scripts/                     # Orchestration scripts (composer-foreach, composer-clean, etc.)
 ├── services/                    # Independent microservices (applications)
-│   └── wp-home-site/           # Bedrock WordPress site
+│   ├── wp-home-site/           # Bedrock WordPress (home site)
+│   └── wp-customer-sites/      # Bedrock WordPress (customer sites)
 ├── packages/                    # Shared libraries (consumed by services)
 │   └── (future shared packages)
 ├── tools/                       # Development utilities
@@ -32,49 +33,55 @@ backend/
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                   Browser / Client                        │
-└────────────────────────┬─────────────────────────────────┘
-                         │
-                         │ HTTP (Local: 8080, Prod: 80)
-                         ▼
-            ┌────────────────────────────┐
-            │   wp-home-site-nginx       │
-            │   (nginx:alpine)           │
-            │   - Serves static files    │
-            │   - Routes PHP to FPM      │
-            └────────────┬───────────────┘
-                         │ FastCGI (9000)
-                         ▼
-            ┌────────────────────────────┐
-            │   wp-home-site-php         │
-            │   (PHP 8.3-FPM)            │
-            │   - Bedrock WordPress      │
-            │   - Multi-stage build      │
-            │   - Development/Production │
-            └────────────┬───────────────┘
-                         │ MySQL (3306)
-                         ▼
-            ┌────────────────────────────┐
-            │   backend-mysql            │
-            │   (MySQL 8.4 LTS)          │
-            │   - Shared database        │
-            │   - Persisted data         │
-            └────────────────────────────┘
+│    - Home site: http://localhost:8080                    │
+│    - Customer sites: http://localhost:8090               │
+└────────────┬────────────────────┬────────────────────────┘
+             │                    │
+   HTTP (8080)                    │ HTTP (8090)
+             ▼                    ▼
+┌────────────────────┐ ┌────────────────────┐
+│ wp-home-site-nginx │ │wp-customer-sites-  │
+│ (nginx:alpine)     │ │nginx (nginx:alpine)│
+│ - Static files     │ │ - Static files     │
+│ - Routes PHP to FPM│ │ - Routes PHP to FPM│
+└─────────┬──────────┘ └─────────┬──────────┘
+          │ FastCGI (9000)        │ FastCGI (9000)
+          ▼                       ▼
+┌────────────────────┐ ┌────────────────────┐
+│ wp-home-site-php   │ │wp-customer-sites-  │
+│ (PHP 8.3-FPM)      │ │php (PHP 8.3-FPM)   │
+│ - Bedrock WP       │ │ - Bedrock WP       │
+│ - Multi-stage build│ │ - Multi-stage build│
+│ - Dev/Production   │ │ - Dev/Production   │
+└─────────┬──────────┘ └─────────┬──────────┘
+          │ MySQL (3306)          │ MySQL (3306)
+          └───────────┬───────────┘
+                      ▼
+          ┌────────────────────────┐
+          │   backend-db           │
+          │   (MySQL 8.4 LTS)      │
+          │   - Shared database    │
+          │   - wp_home_site       │
+          │   - wp_customer_sites  │
+          │   - Persisted data     │
+          └────────────────────────┘
 
 Network: backend-network (bridge)
 ```
 
-**Note:** Traefik reverse proxy planned for future multi-service routing and SSL termination.
+**Note:** Traefik reverse proxy planned for future multi-subdomain routing (home.${DOMAIN}, customers.${DOMAIN}) and SSL termination.
 
 ### Current Services
 
-- **backend-mysql**: Shared MySQL 8.4 LTS instance for all services
-- **wp-home-site-php**: PHP 8.3-FPM running Bedrock WordPress
-- **wp-home-site-nginx**: Nginx web server for static files and FastCGI proxy
+- **backend-db**: Shared MySQL 8.4 LTS instance with `wp_home_site` and `wp_customer_sites` databases
+- **wp-home-site-php**: PHP 8.3-FPM running Bedrock WordPress (home site)
+- **wp-home-site-nginx**: Nginx web server for home site static files and FastCGI proxy
+- **wp-customer-sites-php**: PHP 8.3-FPM running Bedrock WordPress (customer sites)
+- **wp-customer-sites-nginx**: Nginx web server for customer sites static files and FastCGI proxy
 
 ### Future Services
 
 - **Traefik**: Reverse proxy with automatic HTTPS via Let's Encrypt
-- **wp-admin-site**: Additional Bedrock WordPress site for admin portal
 - **Laravel API**: Laravel-based API service
 - More services as needed...
 
@@ -116,8 +123,9 @@ Network: backend-network (bridge)
    ```
 
 6. **Access WordPress**
-   - Local: http://localhost:8080
-   - Complete WordPress installation wizard
+   - Home site: http://localhost:8080
+   - Customer sites: http://localhost:8090
+   - Complete WordPress installation wizard for each site
 
 ### Monorepo Commands
 
@@ -201,7 +209,8 @@ For detailed architecture diagrams, see [docs/architecture/docker-environments.m
 
 ### Accessing Services Locally
 
-- **WordPress Site**: http://localhost:8080 (direct nginx access)
+- **WordPress Home Site**: http://localhost:8080 (direct nginx access)
+- **WordPress Customer Sites**: http://localhost:8090 (direct nginx access)
 - **MySQL**: localhost:3306 (if port exposed in override file)
 - **Traefik Dashboard**: Not yet configured
 
@@ -248,11 +257,17 @@ Both approaches work identically and produce the same result.
 #### Database Access
 
 ```bash
-# Connect to MySQL
-docker-compose exec mysql mysql -u wp_home_user -p wp_home_site
+# Connect to home site database
+docker-compose exec db mysql -u wp_home_user -p wp_home_site
 
-# Import database dump
-docker-compose exec -T mysql mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site < backup.sql
+# Connect to customer sites database
+docker-compose exec db mysql -u wp_customers_user -p wp_customer_sites
+
+# Import database dump (home site)
+docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site < backup.sql
+
+# Import database dump (customer sites)
+docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_customer_sites < backup.sql
 ```
 
 ### Stopping Services
@@ -297,6 +312,20 @@ Add these secrets to your GitHub repository (Settings → Secrets and variables 
 - `WP_HOME_LOGGED_IN_SALT` - WordPress logged in salt
 - `WP_HOME_NONCE_SALT` - WordPress nonce salt
 
+#### wp-customer-sites Secrets
+- `WP_CUSTOMERS_DB_NAME` - Database name (e.g., `wp_customer_sites`)
+- `WP_CUSTOMERS_DB_USER` - Database user
+- `WP_CUSTOMERS_DB_PASSWORD` - Database password
+- `WP_CUSTOMERS_ENV` - WordPress environment (`production`)
+- `WP_CUSTOMERS_AUTH_KEY` - WordPress auth key
+- `WP_CUSTOMERS_SECURE_AUTH_KEY` - WordPress secure auth key
+- `WP_CUSTOMERS_LOGGED_IN_KEY` - WordPress logged in key
+- `WP_CUSTOMERS_NONCE_KEY` - WordPress nonce key
+- `WP_CUSTOMERS_AUTH_SALT` - WordPress auth salt
+- `WP_CUSTOMERS_SECURE_AUTH_SALT` - WordPress secure auth salt
+- `WP_CUSTOMERS_LOGGED_IN_SALT` - WordPress logged in salt
+- `WP_CUSTOMERS_NONCE_SALT` - WordPress nonce salt
+
 Generate WordPress security keys at https://roots.io/salts.html
 
 ### Deployment Workflow
@@ -327,6 +356,7 @@ jobs:
           DOMAIN: ${{ secrets.DOMAIN }}
           ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
           MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          # wp-home-site
           WP_HOME_DB_NAME: ${{ secrets.WP_HOME_DB_NAME }}
           WP_HOME_DB_USER: ${{ secrets.WP_HOME_DB_USER }}
           WP_HOME_DB_PASSWORD: ${{ secrets.WP_HOME_DB_PASSWORD }}
@@ -339,6 +369,19 @@ jobs:
           WP_HOME_SECURE_AUTH_SALT: ${{ secrets.WP_HOME_SECURE_AUTH_SALT }}
           WP_HOME_LOGGED_IN_SALT: ${{ secrets.WP_HOME_LOGGED_IN_SALT }}
           WP_HOME_NONCE_SALT: ${{ secrets.WP_HOME_NONCE_SALT }}
+          # wp-customer-sites
+          WP_CUSTOMERS_DB_NAME: ${{ secrets.WP_CUSTOMERS_DB_NAME }}
+          WP_CUSTOMERS_DB_USER: ${{ secrets.WP_CUSTOMERS_DB_USER }}
+          WP_CUSTOMERS_DB_PASSWORD: ${{ secrets.WP_CUSTOMERS_DB_PASSWORD }}
+          WP_CUSTOMERS_ENV: ${{ secrets.WP_CUSTOMERS_ENV }}
+          WP_CUSTOMERS_AUTH_KEY: ${{ secrets.WP_CUSTOMERS_AUTH_KEY }}
+          WP_CUSTOMERS_SECURE_AUTH_KEY: ${{ secrets.WP_CUSTOMERS_SECURE_AUTH_KEY }}
+          WP_CUSTOMERS_LOGGED_IN_KEY: ${{ secrets.WP_CUSTOMERS_LOGGED_IN_KEY }}
+          WP_CUSTOMERS_NONCE_KEY: ${{ secrets.WP_CUSTOMERS_NONCE_KEY }}
+          WP_CUSTOMERS_AUTH_SALT: ${{ secrets.WP_CUSTOMERS_AUTH_SALT }}
+          WP_CUSTOMERS_SECURE_AUTH_SALT: ${{ secrets.WP_CUSTOMERS_SECURE_AUTH_SALT }}
+          WP_CUSTOMERS_LOGGED_IN_SALT: ${{ secrets.WP_CUSTOMERS_LOGGED_IN_SALT }}
+          WP_CUSTOMERS_NONCE_SALT: ${{ secrets.WP_CUSTOMERS_NONCE_SALT }}
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.SERVER_IP }} << 'EOF'
             cd /opt/product-business/backend
@@ -428,89 +471,91 @@ docker-compose up -d --no-deps --build wp-home-site-nginx
 
 ### Adding a New WordPress Site
 
+**Example**: Adding a third WordPress site (following the pattern of existing wp-home-site and wp-customer-sites)
+
 1. **Create service directory**
    ```bash
    cd services/
-   composer create-project roots/bedrock wp-admin-site
-   cd wp-admin-site
+   composer create-project roots/bedrock wp-additional-site
+   cd wp-additional-site
    ```
 
 2. **Update service configuration**
-   - Create `Dockerfile` (copy from wp-home-site and adjust)
-   - Create `nginx.conf` (copy from wp-home-site and adjust)
+   - Create `Dockerfile` (copy from wp-home-site or wp-customer-sites and adjust)
+   - Create `nginx.conf` (copy from existing service and adjust)
    - Update `composer.json` with correct namespace
 
 3. **Add to `docker-compose.yml`**
    ```yaml
-   wp-admin-site-php:
+   wp-additional-site-php:
      build:
-       context: ./services/wp-admin-site
+       context: ./services/wp-additional-site
        dockerfile: Dockerfile
        target: production
-     container_name: wp-admin-site-php
+     container_name: wp-additional-site-php
      restart: unless-stopped
      environment:
-       DB_NAME: ${WP_ADMIN_DB_NAME}
-       DB_USER: ${WP_ADMIN_DB_USER}
-       DB_PASSWORD: ${WP_ADMIN_DB_PASSWORD}
-       DB_HOST: mysql:3306
-       WP_ENV: ${WP_ADMIN_ENV}
-       WP_HOME: https://admin.${DOMAIN}
-       WP_SITEURL: https://admin.${DOMAIN}/wp
+       DB_NAME: ${WP_ADDITIONAL_DB_NAME}
+       DB_USER: ${WP_ADDITIONAL_DB_USER}
+       DB_PASSWORD: ${WP_ADDITIONAL_DB_PASSWORD}
+       DB_HOST: db:3306
+       WP_ENV: ${WP_ADDITIONAL_ENV}
+       WP_HOME: https://additional.${DOMAIN}
+       WP_SITEURL: https://additional.${DOMAIN}/wp
        # ... security keys
      volumes:
-       - wp_admin_uploads:/var/www/html/web/app/uploads
+       - wp_additional_uploads:/var/www/html/web/app/uploads
      depends_on:
-       mysql:
+       db:
          condition: service_healthy
      networks:
        - backend-network
 
-   wp-admin-site-nginx:
+   wp-additional-site-nginx:
      image: nginx:alpine
-     container_name: wp-admin-site-nginx
+     container_name: wp-additional-site-nginx
      restart: unless-stopped
      volumes:
-       - ./services/wp-admin-site/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-       - wp_admin_uploads:/var/www/html/web/app/uploads:ro
+       - ./services/wp-additional-site/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+       - wp_additional_uploads:/var/www/html/web/app/uploads:ro
      depends_on:
-       - wp-admin-site-php
+       - wp-additional-site-php
      networks:
        - backend-network
      labels:
        - "traefik.enable=true"
-       - "traefik.http.routers.wp-admin.rule=Host(`admin.${DOMAIN}`)"
-       - "traefik.http.routers.wp-admin.entrypoints=websecure"
-       - "traefik.http.routers.wp-admin.tls.certresolver=letsencrypt"
-       - "traefik.http.services.wp-admin.loadbalancer.server.port=80"
+       - "traefik.http.routers.wp-additional.rule=Host(`additional.${DOMAIN}`)"
+       - "traefik.http.routers.wp-additional.entrypoints=websecure"
+       - "traefik.http.routers.wp-additional.tls.certresolver=letsencrypt"
+       - "traefik.http.services.wp-additional.loadbalancer.server.port=80"
    ```
 
 4. **Add database initialization**
    Update `infrastructure/mysql/init/01-create-databases.sql`:
    ```sql
-   CREATE DATABASE IF NOT EXISTS `wp_admin_site` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE DATABASE IF NOT EXISTS `wp_additional_site` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
    ```
 
    Update `infrastructure/mysql/init/02-create-users.sh` to create user from env vars.
 
 5. **Add to `docker-compose.override.example.yml`**
    ```yaml
-   wp-admin-site-php:
+   wp-additional-site-php:
      build:
        target: development
      volumes:
-       - ./services/wp-admin-site:/var/www/html
+       - ./services/wp-additional-site:/var/www/html
      environment:
        WP_ENV: development
-       WP_HOME: http://admin.localhost
-       WP_SITEURL: http://admin.localhost/wp
+       WP_HOME: http://additional.localhost
+       WP_SITEURL: http://additional.localhost/wp
        # ... local config
    ```
 
 6. **Update volumes section**
    ```yaml
    volumes:
-     wp_admin_uploads:
+     wp_additional_uploads:
        driver: local
    ```
 
@@ -529,12 +574,23 @@ Similar process, but:
 Traefik uses **labels** on nginx containers to route traffic:
 
 ```yaml
-labels:
-  - "traefik.enable=true"
-  - "traefik.http.routers.wp-home.rule=Host(`home.${DOMAIN}`)"
-  - "traefik.http.routers.wp-home.entrypoints=websecure"
-  - "traefik.http.routers.wp-home.tls.certresolver=letsencrypt"
-  - "traefik.http.services.wp-home.loadbalancer.server.port=80"
+# Home site
+wp-home-site-nginx:
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.wp-home.rule=Host(`home.${DOMAIN}`)"
+    - "traefik.http.routers.wp-home.entrypoints=websecure"
+    - "traefik.http.routers.wp-home.tls.certresolver=letsencrypt"
+    - "traefik.http.services.wp-home.loadbalancer.server.port=80"
+
+# Customer sites
+wp-customer-sites-nginx:
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.wp-customers.rule=Host(`customers.${DOMAIN}`)"
+    - "traefik.http.routers.wp-customers.entrypoints=websecure"
+    - "traefik.http.routers.wp-customers.tls.certresolver=letsencrypt"
+    - "traefik.http.services.wp-customers.loadbalancer.server.port=80"
 ```
 
 ### SSL/TLS Certificates
@@ -565,17 +621,20 @@ Access at: http://localhost:8080
 ### Backup Database
 
 ```bash
-# Backup single database
-docker-compose exec mysql mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site > wp_home_site_backup.sql
+# Backup home site database
+docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site > wp_home_site_backup.sql
+
+# Backup customer sites database
+docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_customer_sites > wp_customer_sites_backup.sql
 
 # Backup all databases
-docker-compose exec mysql mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --all-databases > all_databases_backup.sql
+docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --all-databases > all_databases_backup.sql
 ```
 
 ### Restore Database
 
 ```bash
-docker-compose exec -T mysql mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site < wp_home_site_backup.sql
+docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site < wp_home_site_backup.sql
 ```
 
 ### MySQL Configuration
@@ -584,7 +643,7 @@ MySQL is configured with:
 - Character set: `utf8mb4`
 - Collation: `utf8mb4_unicode_ci`
 - Health check with automatic retries
-- Data persistence via `mysql_data` volume
+- Data persistence via `db_data` volume
 
 ## Monitoring
 
@@ -611,7 +670,7 @@ docker stats
 
 ```bash
 docker-compose ps
-docker inspect backend-mysql | grep -A 10 Health
+docker inspect backend-db | grep -A 10 Health
 ```
 
 ## Troubleshooting
@@ -633,10 +692,10 @@ docker-compose config
 
 ```bash
 # Verify MySQL is running
-docker-compose ps mysql
+docker-compose ps db
 
 # Check MySQL health
-docker inspect backend-mysql | grep -A 10 Health
+docker inspect backend-db | grep -A 10 Health
 
 # Test connection
 docker-compose exec wp-home-site-php php -r "mysqli_connect('mysql', 'wp_home_user', 'password', 'wp_home_site') or die(mysqli_connect_error());"
@@ -738,3 +797,4 @@ location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
 
 For service-specific documentation, see:
 - [services/wp-home-site/README.md](services/wp-home-site/README.md)
+- [services/wp-customer-sites/README.md](services/wp-customer-sites/README.md)

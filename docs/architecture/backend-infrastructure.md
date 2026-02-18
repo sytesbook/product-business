@@ -14,7 +14,8 @@ backend/
 │   ├── composer-clean.php      # Clean vendor/ and caches
 │   └── composer-list.php       # List all workspaces
 ├── services/                    # Independent microservices (applications)
-│   └── wp-home-site/           # Bedrock WordPress (current)
+│   ├── wp-home-site/           # Bedrock WordPress (home site)
+│   └── wp-customer-sites/      # Bedrock WordPress (customer sites)
 │       ├── vendor/             # Isolated WordPress dependencies
 │       ├── web/                # Public web root
 │       ├── config/             # Environment-based config
@@ -90,18 +91,18 @@ FROM php:8.3-fpm-alpine AS production
 
 ## Current Services
 
-### 1. backend-mysql (MySQL 8.4 LTS)
+### 1. backend-db (MySQL 8.4 LTS)
 
 **Purpose**: Shared database for all backend services
 
 ```yaml
 services:
-  mysql:
+  db:
     image: mysql:8.4
     ports:
       - "3306:3306"  # Exposed in dev, internal in prod
     volumes:
-      - mysql_data:/var/lib/mysql  # Persistent data
+      - db_data:/var/lib/mysql  # Persistent data
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping"]
@@ -110,16 +111,15 @@ services:
 **Features:**
 - Health checks ensure services wait for database readiness
 - Init scripts create databases and users on first startup
-- Shared across all services (WordPress, Laravel, etc.)
+- Shared across all services (WordPress sites, future Laravel API, etc.)
 
 **Databases:**
 - `wp_home_site` - WordPress home site
-- `wp_admin_site` - (Future) WordPress admin site
-- `laravel_api` - (Future) Laravel API
+- `wp_customer_sites` - WordPress customer sites
 
 ### 2. wp-home-site-php (PHP 8.3-FPM)
 
-**Purpose**: WordPress application via Bedrock
+**Purpose**: WordPress home site application via Bedrock
 
 ```yaml
 services:
@@ -128,7 +128,7 @@ services:
       context: ./services/wp-home-site
       target: production  # or development in override
     environment:
-      DB_HOST: mysql:3306
+      DB_HOST: db:3306
       WP_ENV: production
       # ... WordPress config
     volumes:
@@ -151,15 +151,14 @@ services:
 
 ### 3. wp-home-site-nginx (Nginx)
 
-**Purpose**: Web server for static files and FastCGI proxy
+**Purpose**: Web server for home site static files and FastCGI proxy
 
 ```yaml
 services:
   wp-home-site-nginx:
     image: nginx:alpine
     ports:
-      - "80:80"  # Production
-      # - "8080:80"  # Development override
+      - "8080:80"  # Local: 8080, Production: 80 via Traefik
     volumes:
       - ./services/wp-home-site/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - wp_home_uploads:/var/www/html/web/app/uploads:ro
@@ -168,6 +167,60 @@ services:
 **nginx.conf highlights:**
 - Document root: `/var/www/html/web` (Bedrock structure)
 - FastCGI to `wp-home-site-php:9000`
+- Denies access to sensitive files (`.env`, `composer.json`, etc.)
+- Prevents PHP execution in uploads directory
+- Security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+
+### 4. wp-customer-sites-php (PHP 8.3-FPM)
+
+**Purpose**: WordPress customer sites application via Bedrock
+
+```yaml
+services:
+  wp-customer-sites-php:
+    build:
+      context: ./services/wp-customer-sites
+      target: production  # or development in override
+    environment:
+      DB_HOST: db:3306
+      WP_ENV: production
+      # ... WordPress config
+    volumes:
+      - wp_customers_uploads:/var/www/html/web/app/uploads
+```
+
+**Configuration:**
+- **Bedrock structure**: Modern WordPress with Composer
+- **Environment-based**: Reads from env vars, not .env files
+- **Multi-stage builds**: Development vs production images
+- **Opcache tuning**: Production never validates timestamps
+
+**Development vs Production:**
+| Aspect | Development | Production |
+|--------|-------------|------------|
+| Code | Volume-mounted | Baked in image |
+| Composer | Included | Removed |
+| Opcache | Validates timestamps | Never validates |
+| User | root | www-data |
+
+### 5. wp-customer-sites-nginx (Nginx)
+
+**Purpose**: Web server for customer sites static files and FastCGI proxy
+
+```yaml
+services:
+  wp-customer-sites-nginx:
+    image: nginx:alpine
+    ports:
+      - "8090:80"  # Local: 8090, Production: 80 via Traefik
+    volumes:
+      - ./services/wp-customer-sites/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - wp_customers_uploads:/var/www/html/web/app/uploads:ro
+```
+
+**nginx.conf highlights:**
+- Document root: `/var/www/html/web` (Bedrock structure)
+- FastCGI to `wp-customer-sites-php:9000`
 - Denies access to sensitive files (`.env`, `composer.json`, etc.)
 - Prevents PHP execution in uploads directory
 - Security headers (X-Frame-Options, X-Content-Type-Options, etc.)
@@ -184,11 +237,11 @@ networks:
 
 **Internal DNS:**
 - Services reference each other by container name
-- Example: `mysql:3306`, `wp-home-site-php:9000`
+- Example: `db:3306`, `wp-home-site-php:9000`
 
 **Port Mapping:**
-- **Local dev**: Host `8080` → nginx `80`
-- **Production**: Host `80` → nginx `80` (future: Traefik `443` → services)
+- **Local dev**: Host `8080` → wp-home-site-nginx `80`, Host `8090` → wp-customer-sites-nginx `80`
+- **Production**: Traefik `443` → services `80` (future)
 
 ## Storage Volumes
 
@@ -196,12 +249,14 @@ networks:
 
 ```yaml
 volumes:
-  mysql_data:          # Database files
-  wp_home_uploads:     # WordPress media uploads
+  db_data:             # Database files
+  wp_home_uploads:     # WordPress home site media uploads
+  wp_customers_uploads: # WordPress customer sites media uploads
 ```
 
 **Volume Sharing:**
-- `wp_home_uploads` mounted in both PHP (read-write) and Nginx (read-only)
+- `wp_home_uploads` mounted in both wp-home-site-php (read-write) and wp-home-site-nginx (read-only)
+- `wp_customers_uploads` mounted in both wp-customer-sites-php (read-write) and wp-customer-sites-nginx (read-only)
 - Ensures uploaded files are served by Nginx but managed by WordPress
 
 **Backup Strategy:**
@@ -266,7 +321,6 @@ services:
 ```
 
 **Additional Services:**
-- `wp-admin-site`: WordPress admin portal
 - `laravel-api`: Laravel REST API
 - `redis`: Caching layer
 - `elasticsearch`: Search service
@@ -327,8 +381,14 @@ docker-compose up -d
 
 **Zero-downtime:**
 ```bash
+# Deploy home site
 docker-compose up -d --no-deps --build wp-home-site-php
-# Old container replaced, new one starts
+docker-compose up -d --no-deps --build wp-home-site-nginx
+
+# Deploy customer sites
+docker-compose up -d --no-deps --build wp-customer-sites-php
+docker-compose up -d --no-deps --build wp-customer-sites-nginx
+# Old containers replaced, new ones start
 ```
 
 ## Security Considerations
@@ -355,7 +415,7 @@ docker-compose up -d --no-deps --build wp-home-site-php
 
 ```bash
 docker-compose logs -f wp-home-site-php
-docker-compose logs -f backend-mysql
+docker-compose logs -f backend-db
 ```
 
 ### Health Checks

@@ -12,11 +12,11 @@ This document provides detailed architectural diagrams comparing the local devel
 │  │              Backend Directory (Monorepo)                      │ │
 │  │                                                                │ │
 │  │  ├── composer.json (root orchestrator)                        │ │
-│  │  ├── services/wp-home-site/                                   │ │
-│  │  │   ├── web/ (Bedrock structure)                            │ │
-│  │  │   ├── config/                                             │ │
-│  │  │   ├── vendor/ (WordPress + dependencies)                 │ │
-│  │  │   └── composer.json                                       │ │
+│  │  ├── services/                                                 │ │
+│  │  │   ├── wp-home-site/ (Bedrock WordPress - home site)      │ │
+│  │  │   │   ├── web/, config/, vendor/, composer.json         │ │
+│  │  │   └── wp-customer-sites/ (Bedrock WordPress - customers) │ │
+│  │  │       ├── web/, config/, vendor/, composer.json         │ │
 │  │  └── packages/ (shared packages - symlinked)                 │ │
 │  │                                                                │ │
 │  │  docker-compose.yml + docker-compose.override.yml            │ │
@@ -26,41 +26,44 @@ This document provides detailed architectural diagrams comparing the local devel
 │  │                    Docker Environment                          │ │
 │  │                                                                │ │
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  Browser: http://localhost:8080                          ││ │
-│  │  └────────────────────────────────────┬─────────────────────┘│ │
-│  │                                        │                       │ │
-│  │                                        │ HTTP                  │ │
-│  │                                        ▼                       │ │
+│  │  │  Browser:                                                ││ │
+│  │  │    - Home site: http://localhost:8080                   ││ │
+│  │  │    - Customer sites: http://localhost:8090              ││ │
+│  │  └─────────────────┬──────────────────┬─────────────────────┘│ │
+│  │                    │                  │                       │ │
+│  │          HTTP (8080)                  │ HTTP (8090)           │ │
+│  │                    ▼                  ▼                       │ │
+│  │  ┌────────────────────────────┐  ┌────────────────────────┐ │ │
+│  │  │ wp-home-site-nginx         │  │ wp-customer-sites-     │ │ │
+│  │  │ (nginx:alpine)             │  │ nginx (nginx:alpine)   │ │ │
+│  │  │ Port: 8080→80              │  │ Port: 8090→80          │ │ │
+│  │  │ Volumes: ./wp-home-site:ro │  │ Volumes: ./wp-customer-│ │ │
+│  │  │          wp_home_uploads:ro│  │ sites:ro, wp_customers_│ │ │
+│  │  └──────────┬─────────────────┘  │ uploads:ro             │ │ │
+│  │             │                    └──────────┬─────────────┘ │ │
+│  │             │ FastCGI (9000)                │ FastCGI (9000)│ │
+│  │             ▼                               ▼               │ │
+│  │  ┌────────────────────────────┐  ┌────────────────────────┐ │ │
+│  │  │ wp-home-site-php           │  │ wp-customer-sites-php  │ │ │
+│  │  │ (PHP 8.3-FPM)              │  │ (PHP 8.3-FPM)          │ │ │
+│  │  │ Build: target=development  │  │ Build: target=dev      │ │ │
+│  │  │ Volumes:                   │  │ Volumes:               │ │ │
+│  │  │  - ./wp-home-site (MOUNTED)│  │  - ./wp-customer-sites │ │ │
+│  │  │  - wp_home_uploads         │  │    (MOUNTED)           │ │ │
+│  │  │ Env: WP_ENV=development    │  │  - wp_customers_uploads│ │ │
+│  │  │      WP_DEBUG=true         │  │ Env: WP_ENV=dev        │ │ │
+│  │  │      Opcache validates     │  │      WP_DEBUG=true     │ │ │
+│  │  │ Has: Composer, mysql-client│  │      Opcache validates │ │ │
+│  │  └──────────┬─────────────────┘  └──────────┬─────────────┘ │ │
+│  │             │                               │               │ │
+│  │             │ TCP 3306                      │ TCP 3306      │ │
+│  │             └───────────────┬───────────────┘               │ │
+│  │                             ▼                               │ │
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  wp-home-site-nginx (nginx:alpine)                       ││ │
-│  │  │  Port: 8080 → 80                                         ││ │
-│  │  │  Volumes:                                                 ││ │
-│  │  │    - ./services/wp-home-site:/var/www/html:ro (MOUNTED) ││ │
-│  │  │    - wp_home_uploads:/var/www/html/web/app/uploads:ro   ││ │
-│  │  └────────────────────────────────────┬─────────────────────┘│ │
-│  │                                        │                       │ │
-│  │                                        │ FastCGI (port 9000)   │ │
-│  │                                        ▼                       │ │
-│  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  wp-home-site-php (PHP 8.3-FPM)                          ││ │
-│  │  │  Build: Dockerfile target=development                    ││ │
-│  │  │  Volumes:                                                 ││ │
-│  │  │    - ./services/wp-home-site:/var/www/html (MOUNTED)    ││ │
-│  │  │    - wp_home_uploads:/var/www/html/web/app/uploads      ││ │
-│  │  │  Environment:                                             ││ │
-│  │  │    WP_ENV: development                                   ││ │
-│  │  │    WP_DEBUG: true                                        ││ │
-│  │  │    Opcache: validate_timestamps=1 (checks for changes)  ││ │
-│  │  │  Has: Composer, mysql-client (dev tools)                ││ │
-│  │  └────────────────────────────────────┬─────────────────────┘│ │
-│  │                                        │                       │ │
-│  │                                        │ TCP 3306              │ │
-│  │                                        ▼                       │ │
-│  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  backend-mysql (mysql:8.4)                               ││ │
+│  │  │  backend-db (mysql:8.4)                                  ││ │
 │  │  │  Port: 3306 (exposed to host)                           ││ │
-│  │  │  Volume: mysql_data:/var/lib/mysql (persisted)          ││ │
-│  │  │  Environment: root_password_local                        ││ │
+│  │  │  Volume: db_data:/var/lib/mysql (persisted)             ││ │
+│  │  │  Databases: wp_home_site, wp_customer_sites             ││ │
 │  │  │  Init scripts: ./infrastructure/mysql/init              ││ │
 │  │  └──────────────────────────────────────────────────────────┘│ │
 │  │                                                                │ │
@@ -76,9 +79,10 @@ KEY FEATURES - Local Development:
 ✅ MySQL exposed on localhost:3306 → can connect with GUI tools
 ✅ Opcache validates timestamps → picks up code changes
 ✅ Development build target → includes dev dependencies
-✅ Direct port access (8080) → no reverse proxy needed
-✅ http://localhost:8080 → no SSL needed
+✅ Direct port access (8080, 8090) → no reverse proxy needed
+✅ http://localhost:8080 and :8090 → no SSL needed
 ✅ WP_DEBUG enabled → see errors immediately
+✅ Two WordPress services running in parallel
 ```
 
 ### Local Development Workflow
@@ -92,18 +96,22 @@ KEY FEATURES - Local Development:
    ```
 
 2. **Development Cycle**:
-   - Edit code in `services/wp-home-site/`
+   - Edit code in `services/wp-home-site/` or `services/wp-customer-sites/`
    - Changes immediately visible (no rebuild required)
-   - View logs: `docker-compose logs -f wp-home-site-php`
+   - View logs: `docker-compose logs -f wp-home-site-php` or `wp-customer-sites-php`
+   - Access sites: http://localhost:8080 (home) or http://localhost:8090 (customers)
 
 3. **Managing Dependencies**:
    ```bash
-   # Option 1: Local Composer (if installed)
+   # For home site
    cd services/wp-home-site
    composer require wpackagist-plugin/wordpress-seo
+   # OR: docker-compose exec wp-home-site-php composer require wpackagist-plugin/wordpress-seo
 
-   # Option 2: Docker Composer
-   docker-compose exec wp-home-site-php composer require wpackagist-plugin/wordpress-seo
+   # For customer sites
+   cd services/wp-customer-sites
+   composer require wpackagist-plugin/wordpress-seo
+   # OR: docker-compose exec wp-customer-sites-php composer require wpackagist-plugin/wordpress-seo
    ```
 
 4. **Database Access**:
@@ -124,10 +132,9 @@ KEY FEATURES - Local Development:
 │  │                                                                │ │
 │  │  Only contains:                                                │ │
 │  │  ├── docker-compose.yml                                        │ │
-│  │  ├── services/wp-home-site/                                   │ │
-│  │  │   ├── Dockerfile                                           │ │
-│  │  │   ├── nginx.conf                                           │ │
-│  │  │   └── composer.json (for build)                           │ │
+│  │  ├── services/                                                 │ │
+│  │  │   ├── wp-home-site/ (Dockerfile, nginx.conf, composer.json)│ │
+│  │  │   └── wp-customer-sites/ (Dockerfile, nginx.conf, ...)    │ │
 │  │  └── infrastructure/mysql/init/                               │ │
 │  │                                                                │ │
 │  │  NO source code! NO vendor! (built into Docker images)        │ │
@@ -140,54 +147,61 @@ KEY FEATURES - Local Development:
 │  │                    Docker Environment                          │ │
 │  │                                                                │ │
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  Internet: https://home.sytesbook.com                    ││ │
-│  │  └────────────────────────────────┬─────────────────────────┘│ │
-│  │                                    │                           │ │
-│  │                                    │ HTTPS (443)               │ │
-│  │                                    ▼                           │ │
+│  │  │  Internet:                                               ││ │
+│  │  │    - Home site: https://home.sytesbook.com              ││ │
+│  │  │    - Customer sites: https://customers.sytesbook.com    ││ │
+│  │  └────────────────┬──────────────────┬──────────────────────┘│ │
+│  │                   │                  │                        │ │
+│  │             HTTPS (443)        HTTPS (443)                   │ │
+│  │                   ▼                  ▼                        │ │
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
 │  │  │  [Future: Traefik Reverse Proxy]                         ││ │
 │  │  │  - Automatic SSL via Let's Encrypt                       ││ │
-│  │  │  - Routes to multiple services                           ││ │
+│  │  │  - Routes: home.${DOMAIN} → wp-home-site                 ││ │
+│  │  │  - Routes: customers.${DOMAIN} → wp-customer-sites       ││ │
 │  │  │  - Currently not configured                              ││ │
-│  │  └────────────────────────────────┬─────────────────────────┘│ │
-│  │                                    │                           │ │
-│  │                                    │ HTTP                      │ │
-│  │                                    ▼                           │ │
+│  │  └───────────────┬──────────────────┬───────────────────────┘│ │
+│  │                  │                  │                         │ │
+│  │        HTTP (8080)                  │ HTTP (8090)             │ │
+│  │                  ▼                  ▼                         │ │
+│  │  ┌──────────────────────────┐  ┌───────────────────────────┐│ │
+│  │  │ wp-home-site-nginx       │  │ wp-customer-sites-nginx   ││ │
+│  │  │ (nginx:alpine)           │  │ (nginx:alpine)            ││ │
+│  │  │ Port: 80                 │  │ Port: 80                  ││ │
+│  │  │ Volumes:                 │  │ Volumes:                  ││ │
+│  │  │  - nginx.conf (config)   │  │  - nginx.conf (config)    ││ │
+│  │  │  - wp_home_uploads:ro    │  │  - wp_customers_uploads:ro││ │
+│  │  │ NO source code volume!   │  │ NO source code volume!    ││ │
+│  │  └─────────┬────────────────┘  └─────────┬─────────────────┘│ │
+│  │            │                              │                   │ │
+│  │            │ FastCGI (9000)               │ FastCGI (9000)    │ │
+│  │            ▼                              ▼                   │ │
+│  │  ┌──────────────────────────┐  ┌───────────────────────────┐│ │
+│  │  │ wp-home-site-php         │  │ wp-customer-sites-php     ││ │
+│  │  │ (PHP 8.3-FPM)            │  │ (PHP 8.3-FPM)             ││ │
+│  │  │ Build: target=production │  │ Build: target=production  ││ │
+│  │  │ Image contains:          │  │ Image contains:           ││ │
+│  │  │  - Bedrock code (COPIED) │  │  - Bedrock code (COPIED)  ││ │
+│  │  │  - WordPress core        │  │  - WordPress core         ││ │
+│  │  │  - All vendor/ deps      │  │  - All vendor/ deps       ││ │
+│  │  │ Volumes:                 │  │ Volumes:                  ││ │
+│  │  │  - wp_home_uploads       │  │  - wp_customers_uploads   ││ │
+│  │  │ Env: From GitHub Secrets │  │ Env: From GitHub Secrets  ││ │
+│  │  │      WP_ENV=production   │  │      WP_ENV=production    ││ │
+│  │  │      WP_DEBUG=false      │  │      WP_DEBUG=false       ││ │
+│  │  │      Opcache: no checks  │  │      Opcache: no checks   ││ │
+│  │  │ NO Composer! Minimal img │  │ NO Composer! Minimal img  ││ │
+│  │  │ Runs as: www-data        │  │ Runs as: www-data         ││ │
+│  │  └─────────┬────────────────┘  └─────────┬─────────────────┘│ │
+│  │            │                              │                   │ │
+│  │            │ TCP 3306                     │ TCP 3306          │ │
+│  │            └──────────────┬───────────────┘                   │ │
+│  │                           ▼                                   │ │
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  wp-home-site-nginx (nginx:alpine)                       ││ │
-│  │  │  Port: 80 (direct access currently)                     ││ │
-│  │  │  Volumes:                                                 ││ │
-│  │  │    - nginx.conf (config only)                            ││ │
-│  │  │    - wp_home_uploads:/var/www/html/web/app/uploads:ro   ││ │
-│  │  │  NO source code volume! Serves from PHP-FPM container   ││ │
-│  │  └────────────────────────────────┬─────────────────────────┘│ │
-│  │                                    │                           │ │
-│  │                                    │ FastCGI (port 9000)       │ │
-│  │                                    ▼                           │ │
-│  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  wp-home-site-php (PHP 8.3-FPM)                          ││ │
-│  │  │  Build: Dockerfile target=production                     ││ │
-│  │  │  Image contains:                                          ││ │
-│  │  │    - Bedrock code (COPIED during build)                  ││ │
-│  │  │    - WordPress core (COPIED during build)                ││ │
-│  │  │    - All vendor/ dependencies (COPIED during build)      ││ │
-│  │  │  Volumes:                                                 ││ │
-│  │  │    - wp_home_uploads:/var/www/html/web/app/uploads      ││ │
-│  │  │  Environment: From GitHub Secrets (via CI/CD)            ││ │
-│  │  │    WP_ENV: production                                    ││ │
-│  │  │    WP_DEBUG: false                                       ││ │
-│  │  │    Opcache: validate_timestamps=0 (NO checking)         ││ │
-│  │  │  NO Composer! Minimal runtime image                      ││ │
-│  │  │  Runs as: www-data (non-root)                           ││ │
-│  │  └────────────────────────────────┬─────────────────────────┘│ │
-│  │                                    │                           │ │
-│  │                                    │ TCP 3306                  │ │
-│  │                                    ▼                           │ │
-│  │  ┌──────────────────────────────────────────────────────────┐│ │
-│  │  │  backend-mysql (mysql:8.4)                               ││ │
+│  │  │  backend-db (mysql:8.4)                                  ││ │
 │  │  │  Port: 3306 (internal only)                             ││ │
-│  │  │  Volume: mysql_data:/var/lib/mysql (EBS-backed)         ││ │
+│  │  │  Volume: db_data:/var/lib/mysql (EBS-backed)            ││ │
+│  │  │  Databases: wp_home_site, wp_customer_sites             ││ │
 │  │  │  Environment: From GitHub Secrets                        ││ │
 │  │  │  Backups: Automated via AWS or cron                     ││ │
 │  │  └──────────────────────────────────────────────────────────┘│ │
@@ -255,9 +269,14 @@ KEY FEATURES - Production:
 
 3. **Zero-Downtime Updates**:
    ```bash
-   # Replace specific service
+   # Replace home site
    docker-compose up -d --no-deps --build wp-home-site-php
-   # Old container stops, new one starts immediately
+   docker-compose up -d --no-deps --build wp-home-site-nginx
+
+   # Replace customer sites
+   docker-compose up -d --no-deps --build wp-customer-sites-php
+   docker-compose up -d --no-deps --build wp-customer-sites-nginx
+   # Old containers stop, new ones start immediately
    ```
 
 ## Key Differences Summary
@@ -269,9 +288,9 @@ KEY FEATURES - Production:
 | **Composer** | ✅ Available in container | ❌ Not included |
 | **Opcache** | Validates timestamps (slower, detects changes) | Never validates (faster, immutable) |
 | **Build Target** | `development` | `production` |
-| **Port Access** | 8080 → 80 (direct) | 80 (future: Traefik 443) |
+| **Port Access** | 8080, 8090 → 80 (direct) | 80 (future: Traefik 443) |
 | **Protocol** | HTTP | HTTPS (future) |
-| **Domain** | http://localhost:8080 | https://home.${DOMAIN} |
+| **Domain** | http://localhost:8080, :8090 | https://home.${DOMAIN}, customers.${DOMAIN} |
 | **MySQL Access** | Exposed on 3306 | Internal only |
 | **Debug Mode** | WP_DEBUG=true | WP_DEBUG=false |
 | **Environment Config** | docker-compose.override.yml | GitHub Secrets → env vars |
@@ -406,11 +425,13 @@ Configuration via `docker-compose.override.yml` (gitignored):
 
 ```yaml
 services:
-  mysql:
+  db:
     environment:
       MYSQL_ROOT_PASSWORD: root_password_local
       WP_HOME_DB_USER: wp_home_user
       WP_HOME_DB_PASSWORD: local_password
+      WP_CUSTOMERS_DB_USER: wp_customers_user
+      WP_CUSTOMERS_DB_PASSWORD: local_password
     ports:
       - "3306:3306"  # Exposed for GUI tools
 
@@ -433,6 +454,26 @@ services:
       - ./services/wp-home-site:/var/www/html:ro  # Mount for static files
     ports:
       - "8080:80"  # Direct access
+
+  wp-customer-sites-php:
+    build:
+      target: development  # Use dev build stage
+    volumes:
+      - ./services/wp-customer-sites:/var/www/html  # Mount source
+    environment:
+      DB_NAME: wp_customer_sites
+      DB_USER: wp_customers_user
+      DB_PASSWORD: local_password
+      WP_ENV: development
+      WP_HOME: http://localhost:8090
+      WP_DEBUG: "true"
+      # ... security keys (generate at roots.io/salts.html)
+
+  wp-customer-sites-nginx:
+    volumes:
+      - ./services/wp-customer-sites:/var/www/html:ro  # Mount for static files
+    ports:
+      - "8090:80"  # Direct access
 ```
 
 ### Production/Staging
@@ -441,11 +482,13 @@ Configuration via environment variables (GitHub Secrets):
 
 ```yaml
 services:
-  mysql:
+  db:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       WP_HOME_DB_USER: ${WP_HOME_DB_USER}
       WP_HOME_DB_PASSWORD: ${WP_HOME_DB_PASSWORD}
+      WP_CUSTOMERS_DB_USER: ${WP_CUSTOMERS_DB_USER}
+      WP_CUSTOMERS_DB_PASSWORD: ${WP_CUSTOMERS_DB_PASSWORD}
     # No ports exposed (internal only)
 
   wp-home-site-php:
@@ -462,7 +505,24 @@ services:
 
   wp-home-site-nginx:
     ports:
-      - "80:80"  # Direct for now, Traefik in future
+      - "8080:80"  # Local: 8080, Production: 80 via Traefik
+    # No source code volume
+
+  wp-customer-sites-php:
+    build:
+      target: production  # Use production build stage
+    # No volumes! Code is in the image
+    environment:
+      DB_NAME: ${WP_CUSTOMERS_DB_NAME}
+      DB_USER: ${WP_CUSTOMERS_DB_USER}
+      DB_PASSWORD: ${WP_CUSTOMERS_DB_PASSWORD}
+      WP_ENV: ${WP_CUSTOMERS_ENV}
+      WP_HOME: https://customers.${DOMAIN}
+      # ... security keys from secrets
+
+  wp-customer-sites-nginx:
+    ports:
+      - "8090:80"  # Local: 8090, Production: 80 via Traefik
     # No source code volume
 ```
 
@@ -472,9 +532,16 @@ services:
 # Inject secrets as environment variables
 export DOMAIN="${{ secrets.DOMAIN }}"
 export MYSQL_ROOT_PASSWORD="${{ secrets.MYSQL_ROOT_PASSWORD }}"
+
+# Home site secrets
 export WP_HOME_DB_USER="${{ secrets.WP_HOME_DB_USER }}"
 export WP_HOME_DB_PASSWORD="${{ secrets.WP_HOME_DB_PASSWORD }}"
-# ... all other secrets
+# ... all other WP_HOME_* secrets
+
+# Customer sites secrets
+export WP_CUSTOMERS_DB_USER="${{ secrets.WP_CUSTOMERS_DB_USER }}"
+export WP_CUSTOMERS_DB_PASSWORD="${{ secrets.WP_CUSTOMERS_DB_PASSWORD }}"
+# ... all other WP_CUSTOMERS_* secrets
 
 # Deploy
 docker-compose build
@@ -522,7 +589,6 @@ docker-compose up -d
   - Domain-based routing
 
 - **Additional services**:
-  - `wp-admin-site`: WordPress admin portal
   - `laravel-api`: Laravel REST API
   - `redis`: Caching layer
   - `elasticsearch`: Search service
@@ -552,10 +618,10 @@ docker-compose up -d
 ```bash
 cd backend
 docker-compose ps
-docker-compose logs backend-mysql
+docker-compose logs backend-db
 
 # Verify health check
-docker inspect backend-mysql | grep Health
+docker inspect backend-db | grep Health
 ```
 
 **Changes not reflected:**

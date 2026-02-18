@@ -1,11 +1,8 @@
-# wp-home-site
+# wp-customer-sites
 
-WordPress home site service for Business Sytesbook, built with [Bedrock](https://roots.io/bedrock/) - a modern WordPress boilerplate with Composer, improved security, and better project structure.
+WordPress customer sites service for Business Sytesbook, built with [Bedrock](https://roots.io/bedrock/) - a modern WordPress boilerplate with Composer, improved security, and better project structure.
 
 **Part of the [Business Sytesbook Backend Monorepo](../../README.md)**
-
-**Related Services:**
-- [wp-customer-sites](../wp-customer-sites/README.md) - WordPress customer sites (port 8090)
 
 ## Architecture
 
@@ -20,14 +17,14 @@ This service uses:
 ## Directory Structure
 
 ```
-backend/services/wp-home-site/
+backend/services/wp-customer-sites/
 ├── config/                      # Application configuration
 │   ├── application.php          # Main configuration
 │   └── environments/            # Environment-specific overrides
 │       ├── development.php
 │       ├── staging.php
 │       └── production.php
-├── src/                         # Custom PHP code (Sytesbook\Business\Services\WpHomeSite namespace)
+├── src/                         # Custom PHP code (Sytesbook\Business\Services\WpCustomerSites namespace)
 ├── vendor/                      # Composer dependencies (isolated, not in git)
 │   └── sytesbook/              # May include symlinks to ../../packages/* (monorepo packages)
 ├── web/                         # Public web root
@@ -80,7 +77,7 @@ cp docker-compose.override.example.yml docker-compose.override.yml
 Edit `docker-compose.override.yml` and update:
 - Database credentials
 - WordPress security keys (generate at https://roots.io/salts.html)
-- `WP_HOME` URL (default: http://localhost:8080)
+- `WP_HOME` URL (default: http://localhost:8090)
 
 ### 3. Start Services
 
@@ -91,12 +88,12 @@ docker-compose up -d
 
 This starts:
 - **backend-db** - Shared MySQL 8.4 LTS (port 3306)
-- **wp-home-site-php** - PHP 8.3-FPM (development build)
-- **wp-home-site-nginx** - Nginx web server (port 8080)
+- **wp-customer-sites-php** - PHP 8.3-FPM (development build)
+- **wp-customer-sites-nginx** - Nginx web server (port 8090)
 
 ### 4. Access WordPress
 
-Navigate to http://localhost:8080 and complete the WordPress installation wizard.
+Navigate to http://localhost:8090 and complete the WordPress installation wizard.
 
 ### 5. Stop Services
 
@@ -119,7 +116,7 @@ You can use Composer in two ways:
 If you have Composer installed locally, simply run commands from the service directory:
 
 ```bash
-cd backend/services/wp-home-site
+cd backend/services/wp-customer-sites
 
 # Install plugins
 composer require wpackagist-plugin/wordpress-seo
@@ -140,10 +137,10 @@ If you don't have Composer installed locally or prefer to use the containerized 
 cd ../../
 
 # Install plugins
-docker-compose exec wp-home-site-php composer require wpackagist-plugin/wordpress-seo
+docker-compose exec wp-customer-sites-php composer require wpackagist-plugin/wordpress-seo
 
 # Install themes
-docker-compose exec wp-home-site-php composer require wpackagist-theme/astra
+docker-compose exec wp-customer-sites-php composer require wpackagist-theme/astra
 ```
 
 **Both approaches work identically** since the service directory is volume-mounted into the container during development.
@@ -154,15 +151,15 @@ Plugins are automatically installed to `web/app/plugins/` and themes to `web/app
 
 ```bash
 # Using local Composer (recommended)
-cd backend/services/wp-home-site
+cd backend/services/wp-customer-sites
 composer update                                    # Update all dependencies
 composer update roots/wordpress                    # Update WordPress core
 composer update wpackagist-plugin/wordpress-seo    # Update specific plugin
 
 # OR using Docker Composer (from backend/ directory)
 cd ../../
-docker-compose exec wp-home-site-php composer update
-docker-compose exec wp-home-site-php composer update roots/wordpress
+docker-compose exec wp-customer-sites-php composer update
+docker-compose exec wp-customer-sites-php composer update roots/wordpress
 ```
 
 ### Private or Custom Plugins/Themes
@@ -180,12 +177,12 @@ All sensitive configuration is managed via Docker Compose environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DB_NAME` | Database name | `wp_home_site` |
+| `DB_NAME` | Database name | `wp_customer_sites` |
 | `DB_USER` | Database user | `wordpress` |
 | `DB_PASSWORD` | Database password | `secure_password` |
 | `DB_HOST` | Database host | `mysql:3306` |
 | `WP_ENV` | Environment type | `development`, `staging`, `production` |
-| `WP_HOME` | Site URL | `http://localhost:8080` |
+| `WP_HOME` | Site URL | `http://localhost:8090` |
 | `WP_SITEURL` | WordPress core URL | `${WP_HOME}/wp` |
 | `AUTH_KEY` | WordPress auth key | Generate at https://roots.io/salts.html |
 | `SECURE_AUTH_KEY` | WordPress secure auth key | Generate at https://roots.io/salts.html |
@@ -210,7 +207,7 @@ All sensitive configuration is managed via Docker Compose environment variables:
 Follow Business Sytesbook backend conventions:
 - **PHP Version**: 8.3+
 - **Code Style**: PSR-12
-- **Namespace**: `Sytesbook\Business\Services\WpHomeSite\`
+- **Namespace**: `Sytesbook\Business\Services\WpCustomerSites\`
 - **Typing**: Strict types, type hints for all parameters and return values
 - **Classes**: Final by default unless designed for extension
 
@@ -220,14 +217,14 @@ Bedrock includes Laravel Pint for code formatting:
 
 ```bash
 # Using local Composer
-cd backend/services/wp-home-site
+cd backend/services/wp-customer-sites
 composer lint         # Check code style
 composer lint:fix     # Fix code style
 
 # OR using Docker Composer (from backend/ directory)
 cd ../../
-docker-compose exec wp-home-site-php composer lint
-docker-compose exec wp-home-site-php composer lint:fix
+docker-compose exec wp-customer-sites-php composer lint
+docker-compose exec wp-customer-sites-php composer lint:fix
 
 # Run lint across all monorepo workspaces
 composer lint        # From backend/ root
@@ -239,7 +236,7 @@ composer lint        # From backend/ root
 
 ```bash
 # Build production Docker image
-docker build -t wp-home-site:latest .
+docker build -t wp-customer-sites:latest .
 
 # The Dockerfile handles:
 # - Installing Composer dependencies (--no-dev)
@@ -283,8 +280,8 @@ docker-compose logs backend-db
 Reset permissions on uploads directory:
 ```bash
 cd ../../
-docker-compose exec wp-home-site-php chown -R www-data:www-data /var/www/html/web/app/uploads
-docker-compose exec wp-home-site-php chmod -R 775 /var/www/html/web/app/uploads
+docker-compose exec wp-customer-sites-php chown -R www-data:www-data /var/www/html/web/app/uploads
+docker-compose exec wp-customer-sites-php chmod -R 775 /var/www/html/web/app/uploads
 ```
 
 ### WordPress installation loop
@@ -300,8 +297,8 @@ docker-compose up -d
 
 ```bash
 cd ../../
-docker-compose logs -f wp-home-site-php
-docker-compose logs -f wp-home-site-nginx
+docker-compose logs -f wp-customer-sites-php
+docker-compose logs -f wp-customer-sites-nginx
 ```
 
 ## Resources
