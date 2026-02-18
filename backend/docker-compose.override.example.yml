@@ -1,0 +1,90 @@
+# Local Development Configuration
+# Copy this file to docker-compose.override.yml and update with your local values
+# docker-compose.override.yml is gitignored and contains your local secrets
+
+services:
+  traefik:
+    # For local dev, you can override the ACME email
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # For local dev, you might want to disable HTTPS or use staging ACME
+      # - "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=dev@localhost"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    environment:
+      - DOMAIN=localhost
+      - ACME_EMAIL=dev@localhost
+
+  mysql:
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_local
+      # User credentials for init script
+      WP_HOME_DB_USER: wp_home_user
+      WP_HOME_DB_PASSWORD: local_password
+      # Add more as you create services
+      # WP_ADMIN_DB_USER: wp_admin_user
+      # WP_ADMIN_DB_PASSWORD: local_password
+      # LARAVEL_DB_USER: laravel_user
+      # LARAVEL_DB_PASSWORD: local_password
+    ports:
+      # Expose MySQL port for local development (optional)
+      - "3306:3306"
+
+  wp-home-site-php:
+    # For local dev, use development target with volume mounts
+    build:
+      target: development
+    volumes:
+      # Mount source code for live reloading
+      - ./services/wp-home-site:/var/www/html
+    environment:
+      DB_NAME: wp_home_site
+      DB_USER: wp_home_user
+      DB_PASSWORD: local_password
+      DB_HOST: mysql:3306
+      WP_ENV: development
+      WP_HOME: http://home.localhost
+      WP_SITEURL: http://home.localhost/wp
+      # Generate your own keys at https://roots.io/salts.html
+      AUTH_KEY: "local-dev-auth-key-change-me"
+      SECURE_AUTH_KEY: "local-dev-secure-auth-key-change-me"
+      LOGGED_IN_KEY: "local-dev-logged-in-key-change-me"
+      NONCE_KEY: "local-dev-nonce-key-change-me"
+      AUTH_SALT: "local-dev-auth-salt-change-me"
+      SECURE_AUTH_SALT: "local-dev-secure-auth-salt-change-me"
+      LOGGED_IN_SALT: "local-dev-logged-in-salt-change-me"
+      NONCE_SALT: "local-dev-nonce-salt-change-me"
+      # Development debugging
+      WP_DEBUG: "true"
+      WP_DEBUG_DISPLAY: "true"
+      WP_DEBUG_LOG: "false"
+
+  wp-home-site-nginx:
+    volumes:
+      # Mount source code for nginx to serve static files
+      - ./services/wp-home-site:/var/www/html:ro
+    labels:
+      # For local dev with Traefik
+      - "traefik.enable=true"
+      - "traefik.http.routers.wp-home.rule=Host(`home.localhost`)"
+      - "traefik.http.routers.wp-home.entrypoints=web"
+      - "traefik.http.services.wp-home.loadbalancer.server.port=80"
+
+# Add more service overrides as needed
+# Example for future wp-admin-site:
+#  wp-admin-site-php:
+#    build:
+#      target: development
+#    volumes:
+#      - ./services/wp-admin-site:/var/www/html
+#    environment:
+#      DB_NAME: wp_admin_site
+#      DB_USER: wp_admin_user
+#      DB_PASSWORD: local_password
+#      # ... etc

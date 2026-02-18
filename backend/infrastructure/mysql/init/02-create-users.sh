@@ -1,0 +1,39 @@
+#!/bin/bash
+# Create MySQL users from environment variables
+# This script runs automatically when MySQL container starts for the first time
+
+set -e
+
+echo "Creating database users..."
+
+# wp-home-site user
+if [ -n "$WP_HOME_DB_USER" ] && [ -n "$WP_HOME_DB_PASSWORD" ]; then
+  mysql -uroot -p"$MYSQL_ROOT_PASSWORD" <<-EOSQL
+    CREATE USER IF NOT EXISTS '$WP_HOME_DB_USER'@'%' IDENTIFIED BY '$WP_HOME_DB_PASSWORD';
+    GRANT ALL PRIVILEGES ON \`wp_home_site\`.* TO '$WP_HOME_DB_USER'@'%';
+    FLUSH PRIVILEGES;
+EOSQL
+  echo "Created user: $WP_HOME_DB_USER"
+fi
+
+# wp-admin-site user (if configured)
+if [ -n "$WP_ADMIN_DB_USER" ] && [ -n "$WP_ADMIN_DB_PASSWORD" ]; then
+  mysql -uroot -p"$MYSQL_ROOT_PASSWORD" <<-EOSQL
+    CREATE USER IF NOT EXISTS '$WP_ADMIN_DB_USER'@'%' IDENTIFIED BY '$WP_ADMIN_DB_PASSWORD';
+    GRANT ALL PRIVILEGES ON \`wp_admin_site\`.* TO '$WP_ADMIN_DB_USER'@'%';
+    FLUSH PRIVILEGES;
+EOSQL
+  echo "Created user: $WP_ADMIN_DB_USER"
+fi
+
+# Laravel API user (if configured)
+if [ -n "$LARAVEL_DB_USER" ] && [ -n "$LARAVEL_DB_PASSWORD" ]; then
+  mysql -uroot -p"$MYSQL_ROOT_PASSWORD" <<-EOSQL
+    CREATE USER IF NOT EXISTS '$LARAVEL_DB_USER'@'%' IDENTIFIED BY '$LARAVEL_DB_PASSWORD';
+    GRANT ALL PRIVILEGES ON \`laravel_api\`.* TO '$LARAVEL_DB_USER'@'%';
+    FLUSH PRIVILEGES;
+EOSQL
+  echo "Created user: $LARAVEL_DB_USER"
+fi
+
+echo "Database users created successfully!"

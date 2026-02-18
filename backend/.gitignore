@@ -47,6 +47,9 @@ psalm.xml.local
 # Docker
 docker-compose.override.yml
 
+# Infrastructure
+infrastructure/traefik/letsencrypt/
+
 # Database
 *.sqlite
 *.sqlite3
@@ -56,3 +59,15 @@ docker-compose.override.yml
 .phpstorm.meta.php
 _ide_helper.php
 _ide_helper_models.php
+
+# Service-specific ignores
+services/*/vendor/
+services/*/web/wp/
+services/*/web/app/uploads/
+services/*/web/app/plugins/*/
+!services/*/web/app/plugins/.gitkeep
+services/*/web/app/mu-plugins/*/
+!services/*/web/app/mu-plugins/.gitkeep
+services/*/web/app/themes/*/
+!services/*/web/app/themes/.gitkeep
+!services/*/web/app/themes/custom-*
