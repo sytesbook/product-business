@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/base.json
+path: web/wp
+server:
+  docroot: web
