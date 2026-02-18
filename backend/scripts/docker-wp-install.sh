@@ -60,7 +60,34 @@ done
 log_info "Database is ready!"
 
 # ============================================================================
-# 2. WordPress Installation Check
+# 2. Ensure Uploads Directory Exists with Correct Permissions
+# ============================================================================
+
+log_info "Ensuring uploads directory exists with correct permissions..."
+
+# Create uploads directory structure if it doesn't exist
+UPLOADS_DIR="/var/www/html/web/app/uploads"
+mkdir -p "$UPLOADS_DIR"
+
+# Set ownership to www-data (PHP-FPM user)
+# This is critical for development where host volumes override container permissions
+chown -R www-data:www-data "$UPLOADS_DIR"
+
+# Set permissions: 775 (rwxrwxr-x)
+# - Owner (www-data): read, write, execute
+# - Group (www-data): read, write, execute
+# - Others: read, execute
+chmod -R 775 "$UPLOADS_DIR"
+
+# Also ensure parent directory is writable (WordPress needs to create year-based subdirectories)
+APP_DIR="/var/www/html/web/app"
+chown www-data:www-data "$APP_DIR"
+chmod 775 "$APP_DIR"
+
+log_info "Uploads directory permissions configured successfully."
+
+# ============================================================================
+# 3. WordPress Installation Check
 # ============================================================================
 
 log_info "Checking if WordPress is installed..."
@@ -75,7 +102,7 @@ else
 fi
 
 # ============================================================================
-# 3. WordPress Installation (if needed)
+# 4. WordPress Installation (if needed)
 # ============================================================================
 
 if [ "$WP_INSTALLED" = false ]; then
@@ -114,7 +141,7 @@ else
 fi
 
 # ============================================================================
-# 4. Start PHP-FPM
+# 5. Start PHP-FPM
 # ============================================================================
 
 log_info "Starting PHP-FPM..."

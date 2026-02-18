@@ -770,6 +770,22 @@ docker-compose exec wp-home-site-php chown -R www-data:www-data /var/www/html/we
 docker-compose exec wp-home-site-php chmod -R 775 /var/www/html/web/app/uploads
 ```
 
+### Upload Permission Issues in Development
+
+**Symptom**: "Unable to create directory uploads/2026/02. Is its parent directory writable by the server?" when uploading media in WordPress.
+
+**Cause**: In development mode, the entire codebase is mounted from the host filesystem. Host permissions (owned by your local user) override container permissions (expected to be `www-data`). PHP-FPM workers run as `www-data` and cannot write to directories owned by your host user.
+
+**Solution**: The entrypoint script (`scripts/docker-wp-install.sh`) automatically fixes permissions on container startup. Simply restart the container:
+
+```bash
+docker-compose restart wp-home-site-php
+# or
+docker-compose restart wp-customer-sites-php
+```
+
+**Note**: This is only an issue in development. In production, code is baked into the Docker image with correct permissions, and uploads are stored in a dedicated Docker volume (`wp_home_uploads` or `wp_customers_uploads`).
+
 ## Performance Optimization
 
 ### Production PHP Configuration

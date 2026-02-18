@@ -280,12 +280,16 @@ docker-compose logs backend-db
 
 ### Permission errors
 
-Reset permissions on uploads directory:
+**Note**: In development mode, permissions are automatically fixed by the entrypoint script on container startup. This handles the case where host filesystem permissions override container permissions.
+
+If you still encounter permission issues after container startup, manually reset permissions:
 ```bash
 cd ../../
 docker-compose exec wp-home-site-php chown -R www-data:www-data /var/www/html/web/app/uploads
 docker-compose exec wp-home-site-php chmod -R 775 /var/www/html/web/app/uploads
 ```
+
+**Why this happens**: In development, the entire codebase is mounted from your host filesystem (`./services/wp-home-site:/var/www/html`). Your local user owns these files on the host, but PHP-FPM runs as `www-data` inside the container. The entrypoint script automatically fixes this on startup, but if you manually create directories on the host, you may need to restart the container or manually fix permissions.
 
 ### WordPress installation loop
 

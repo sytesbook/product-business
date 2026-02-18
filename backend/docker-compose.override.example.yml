@@ -21,6 +21,8 @@ services:
       target: development
     volumes:
       # Mount source code for live reloading
+      # Note: Host filesystem permissions override container permissions.
+      # The entrypoint script automatically fixes uploads directory permissions on startup.
       - ./services/wp-home-site:/var/www/html
     environment:
       DB_NAME: wp_home_site_db
@@ -64,6 +66,8 @@ services:
       target: development
     volumes:
       # Mount source code for live reloading
+      # Note: Host filesystem permissions override container permissions.
+      # The entrypoint script automatically fixes uploads directory permissions on startup.
       - ./services/wp-customer-sites:/var/www/html
     environment:
       DB_NAME: wp_customer_sites_db
