@@ -141,6 +141,38 @@ else
 fi
 
 # ============================================================================
+# 4.5. Configure Permalink Structure
+# ============================================================================
+
+log_info "Configuring WordPress permalink structure..."
+
+# Check if WordPress is installed before configuring permalinks
+if su-exec www-data wp core is-installed 2>/dev/null; then
+    # Get current permalink structure
+    CURRENT_STRUCTURE=$(su-exec www-data wp option get permalink_structure 2>/dev/null || echo "")
+
+    if [ -z "$CURRENT_STRUCTURE" ]; then
+        log_info "Setting permalink structure to post name format..."
+
+        # Set pretty permalinks (post name structure)
+        # This enables REST API at /wp-json/ paths
+        if su-exec www-data wp rewrite structure '/%postname%/' --hard 2>/dev/null; then
+            log_info "Permalink structure set successfully!"
+
+            # Flush rewrite rules to ensure they're active
+            su-exec www-data wp rewrite flush 2>/dev/null
+            log_info "Rewrite rules flushed!"
+        else
+            log_warn "Failed to set permalink structure, REST API may use query string format"
+        fi
+    else
+        log_info "Permalink structure already configured: ${CURRENT_STRUCTURE}"
+    fi
+else
+    log_warn "WordPress not installed, skipping permalink configuration"
+fi
+
+# ============================================================================
 # 5. Start PHP-FPM
 # ============================================================================
 
