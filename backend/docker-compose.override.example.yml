@@ -43,7 +43,7 @@ services:
       # WordPress auto-installation
       WP_ADMIN_USER: "admin"
       WP_ADMIN_PASSWORD: "local_wp_password"
-      WP_ADMIN_EMAIL: "dev@localhost"
+      WP_ADMIN_EMAIL: "dev@example.com"
       WP_SITE_TITLE: "Home Site (Local Dev)"
       # Development debugging
       WP_DEBUG: "true"
@@ -86,7 +86,7 @@ services:
       # WordPress auto-installation
       WP_ADMIN_USER: "admin"
       WP_ADMIN_PASSWORD: "local_wp_password"
-      WP_ADMIN_EMAIL: "dev@customers.localhost"
+      WP_ADMIN_EMAIL: "dev@example.com"
       WP_SITE_TITLE: "Customer Sites (Local Dev)"
       # Development debugging
       WP_DEBUG: "true"

@@ -28,10 +28,24 @@ log_info "Waiting for database to be ready..."
 MAX_RETRIES=30
 RETRY_COUNT=0
 
-# Extract hostname from DB_HOST (handles format like "db:3306")
+# Extract hostname and port from DB_HOST (handles format like "db:3306")
 DB_HOSTNAME="${DB_HOST%:*}"
+DB_PORT="${DB_HOST##*:}"
+# If no port specified, default to 3306
+if [ "$DB_PORT" = "$DB_HOSTNAME" ]; then
+    DB_PORT=3306
+fi
 
-until mysql -h"${DB_HOSTNAME}" -u"${DB_USER}" -p"${DB_PASSWORD}" -e "USE ${DB_NAME};" 2>/dev/null; do
+# Use PHP mysqli to check database connectivity (natively supports caching_sha2_password)
+# This bypasses Alpine's MariaDB client which has compatibility issues with MySQL 8.4
+until php -r "
+\$mysqli = @new mysqli('$DB_HOSTNAME', '$DB_USER', '$DB_PASSWORD', '$DB_NAME', $DB_PORT);
+if (\$mysqli->connect_error) {
+    exit(1);
+}
+\$mysqli->close();
+exit(0);
+" 2>/dev/null; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
 
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
@@ -104,4 +118,6 @@ fi
 # ============================================================================
 
 log_info "Starting PHP-FPM..."
-exec "$@"
+# Start PHP-FPM (master runs as root, worker processes run as www-data via php-fpm.d/www.conf)
+# Use exec to replace the shell process with php-fpm (proper signal handling)
+exec php-fpm --nodaemonize --fpm-config /usr/local/etc/php-fpm.conf

@@ -132,9 +132,8 @@ RUN mkdir -p /var/www/html/web/app/uploads \
 # Expose PHP-FPM port
 EXPOSE 9000
 
-# Use entrypoint script with su-exec to drop privileges
+# Use entrypoint script (starts PHP-FPM directly)
 ENTRYPOINT ["docker-wp-install.sh"]
-CMD ["su-exec", "www-data", "php-fpm"]
 
 # ==============================================================================
 # Stage 3: Development - Includes dev dependencies and Composer
@@ -184,6 +183,5 @@ WORKDIR /var/www/html
 
 EXPOSE 9000
 
-# Use entrypoint script with su-exec to drop privileges
+# Use entrypoint script (starts PHP-FPM directly)
 ENTRYPOINT ["docker-wp-install.sh"]
-CMD ["su-exec", "www-data", "php-fpm"]
