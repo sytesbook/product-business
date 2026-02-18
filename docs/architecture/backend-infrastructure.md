@@ -114,8 +114,8 @@ services:
 - Shared across all services (WordPress sites, future Laravel API, etc.)
 
 **Databases:**
-- `wp_home_site` - WordPress home site
-- `wp_customer_sites` - WordPress customer sites
+- `wp_home_site_db` - WordPress home site
+- `wp_customer_sites_db` - WordPress customer sites
 
 ### 2. wp-home-site-php (PHP 8.3-FPM)
 

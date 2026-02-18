@@ -37,7 +37,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 
 # Copy composer files first (for better layer caching)
-COPY composer.json composer.lock ./
+COPY services/wp-customer-sites/composer.json services/wp-customer-sites/composer.lock ./
 
 # Install dependencies (without scripts to avoid errors)
 RUN composer install \
@@ -48,7 +48,7 @@ RUN composer install \
     --optimize-autoloader
 
 # Copy application code
-COPY . .
+COPY services/wp-customer-sites/ .
 
 # Run composer scripts and dump autoloader
 RUN composer dump-autoload --optimize --no-dev
@@ -65,7 +65,9 @@ RUN apk add --no-cache \
     libjpeg-turbo \
     freetype \
     icu-libs \
-    oniguruma
+    oniguruma \
+    su-exec \
+    mysql-client
 
 # Install PHP extensions (same as builder)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
@@ -78,6 +80,12 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         intl \
         mbstring \
         exif
+
+# Install WP-CLI
+RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+    && chmod +x wp-cli.phar \
+    && mv wp-cli.phar /usr/local/bin/wp \
+    && wp --info
 
 # Configure PHP for production
 RUN { \
@@ -112,6 +120,10 @@ WORKDIR /var/www/html
 # Copy built application from builder stage
 COPY --from=builder --chown=www-data:www-data /var/www/html /var/www/html
 
+# Copy entrypoint script
+COPY scripts/docker-wp-install.sh /usr/local/bin/docker-wp-install.sh
+RUN chmod +x /usr/local/bin/docker-wp-install.sh
+
 # Create uploads directory with correct permissions
 RUN mkdir -p /var/www/html/web/app/uploads \
     && chown -R www-data:www-data /var/www/html/web/app/uploads \
@@ -120,10 +132,9 @@ RUN mkdir -p /var/www/html/web/app/uploads \
 # Expose PHP-FPM port
 EXPOSE 9000
 
-# Run as www-data user for security
-USER www-data
-
-CMD ["php-fpm"]
+# Use entrypoint script with su-exec to drop privileges
+ENTRYPOINT ["docker-wp-install.sh"]
+CMD ["su-exec", "www-data", "php-fpm"]
 
 # ==============================================================================
 # Stage 3: Development - Includes dev dependencies and Composer
@@ -131,10 +142,15 @@ CMD ["php-fpm"]
 FROM builder AS development
 
 # Install additional dev tools
-RUN apk add --no-cache mysql-client
+RUN apk add --no-cache mysql-client su-exec
 
 # Keep Composer in development
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Install WP-CLI
+RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+    && chmod +x wp-cli.phar \
+    && mv wp-cli.phar /usr/local/bin/wp
 
 # Install all dependencies (including dev)
 RUN composer install \
@@ -157,6 +173,10 @@ RUN { \
         echo 'max_execution_time=300'; \
     } > /usr/local/etc/php/conf.d/uploads.ini
 
+# Copy entrypoint script
+COPY scripts/docker-wp-install.sh /usr/local/bin/docker-wp-install.sh
+RUN chmod +x /usr/local/bin/docker-wp-install.sh
+
 WORKDIR /var/www/html
 
 # In development, we mount the code as a volume, so don't copy it
@@ -164,4 +184,6 @@ WORKDIR /var/www/html
 
 EXPOSE 9000
 
-CMD ["php-fpm"]
+# Use entrypoint script with su-exec to drop privileges
+ENTRYPOINT ["docker-wp-install.sh"]
+CMD ["su-exec", "www-data", "php-fpm"]

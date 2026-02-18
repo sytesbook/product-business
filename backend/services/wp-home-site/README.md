@@ -180,7 +180,7 @@ All sensitive configuration is managed via Docker Compose environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DB_NAME` | Database name | `wp_home_site` |
+| `DB_NAME` | Database name | `wp_home_site_db` |
 | `DB_USER` | Database user | `wordpress` |
 | `DB_PASSWORD` | Database password | `secure_password` |
 | `DB_HOST` | Database host | `mysql:3306` |

@@ -5,12 +5,12 @@
 services:
   db:
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_local
+      MYSQL_ROOT_PASSWORD: root_db_password_local
       # User credentials for init script
-      WP_HOME_DB_USER: wp_home_user
-      WP_HOME_DB_PASSWORD: local_password
-      WP_CUSTOMERS_DB_USER: wp_customer_sites_user
-      WP_CUSTOMERS_DB_PASSWORD: local_password
+      WP_HOME_DB_USER: wp_home_db_user
+      WP_HOME_DB_PASSWORD: local_db_password
+      WP_CUSTOMERS_DB_USER: wp_customers_db_user
+      WP_CUSTOMERS_DB_PASSWORD: local_db_password
     ports:
       # Expose MySQL port for local development (optional)
       - "3306:3306"
@@ -23,14 +23,15 @@ services:
       # Mount source code for live reloading
       - ./services/wp-home-site:/var/www/html
     environment:
-      DB_NAME: wp_home_site
-      DB_USER: wp_home_user
-      DB_PASSWORD: local_password
+      DB_NAME: wp_home_site_db
+      DB_USER: wp_home_db_user
+      DB_PASSWORD: local_db_password
       DB_HOST: db:3306
       WP_ENV: development
-      WP_HOME: http://home.localhost
-      WP_SITEURL: http://home.localhost/wp
-      # Generate your own keys at https://roots.io/salts.html
+      WP_HOME: http://localhost:8080
+      WP_SITEURL: http://localhost:8080/wp
+      # NOTE: Use only alphanumeric [0-9a-zA-Z] to avoid $ interpolation issues
+      # Generate your own keys at https://roots.io/salts.html (then remove special chars)
       AUTH_KEY: "local-dev-auth-key-change-me"
       SECURE_AUTH_KEY: "local-dev-secure-auth-key-change-me"
       LOGGED_IN_KEY: "local-dev-logged-in-key-change-me"
@@ -39,6 +40,11 @@ services:
       SECURE_AUTH_SALT: "local-dev-secure-auth-salt-change-me"
       LOGGED_IN_SALT: "local-dev-logged-in-salt-change-me"
       NONCE_SALT: "local-dev-nonce-salt-change-me"
+      # WordPress auto-installation
+      WP_ADMIN_USER: "admin"
+      WP_ADMIN_PASSWORD: "local_wp_password"
+      WP_ADMIN_EMAIL: "dev@localhost"
+      WP_SITE_TITLE: "Home Site (Local Dev)"
       # Development debugging
       WP_DEBUG: "true"
       WP_DEBUG_DISPLAY: "true"
@@ -60,14 +66,15 @@ services:
       # Mount source code for live reloading
       - ./services/wp-customer-sites:/var/www/html
     environment:
-      DB_NAME: wp_customer_sites
-      DB_USER: wp_customer_sites_user
-      DB_PASSWORD: local_password
+      DB_NAME: wp_customer_sites_db
+      DB_USER: wp_customers_db_user
+      DB_PASSWORD: local_db_password
       DB_HOST: db:3306
       WP_ENV: development
-      WP_HOME: http://customer.localhost
-      WP_SITEURL: http://customer.localhost/wp
-      # Generate your own keys at https://roots.io/salts.html
+      WP_HOME: http://localhost:8090
+      WP_SITEURL: http://localhost:8090/wp
+      # NOTE: Use only alphanumeric [0-9a-zA-Z] to avoid $ interpolation issues
+      # Generate your own keys at https://roots.io/salts.html (then remove special chars)
       AUTH_KEY: "local-dev-auth-key-change-me"
       SECURE_AUTH_KEY: "local-dev-secure-auth-key-change-me"
       LOGGED_IN_KEY: "local-dev-logged-in-key-change-me"
@@ -76,6 +83,11 @@ services:
       SECURE_AUTH_SALT: "local-dev-secure-auth-salt-change-me"
       LOGGED_IN_SALT: "local-dev-logged-in-salt-change-me"
       NONCE_SALT: "local-dev-nonce-salt-change-me"
+      # WordPress auto-installation
+      WP_ADMIN_USER: "admin"
+      WP_ADMIN_PASSWORD: "local_wp_password"
+      WP_ADMIN_EMAIL: "dev@customers.localhost"
+      WP_SITE_TITLE: "Customer Sites (Local Dev)"
       # Development debugging
       WP_DEBUG: "true"
       WP_DEBUG_DISPLAY: "true"

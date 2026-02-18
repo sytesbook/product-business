@@ -61,8 +61,8 @@ backend/
           │   backend-db           │
           │   (MySQL 8.4 LTS)      │
           │   - Shared database    │
-          │   - wp_home_site       │
-          │   - wp_customer_sites  │
+          │   - wp_home_site_db       │
+          │   - wp_customer_sites_db  │
           │   - Persisted data     │
           └────────────────────────┘
 
@@ -73,7 +73,7 @@ Network: backend-network (bridge)
 
 ### Current Services
 
-- **backend-db**: Shared MySQL 8.4 LTS instance with `wp_home_site` and `wp_customer_sites` databases
+- **backend-db**: Shared MySQL 8.4 LTS instance with `wp_home_site_db` and `wp_customer_sites_db` databases
 - **wp-home-site-php**: PHP 8.3-FPM running Bedrock WordPress (home site)
 - **wp-home-site-nginx**: Nginx web server for home site static files and FastCGI proxy
 - **wp-customer-sites-php**: PHP 8.3-FPM running Bedrock WordPress (customer sites)
@@ -113,6 +113,11 @@ Network: backend-network (bridge)
 
 4. **Configure local environment**
    ```bash
+   # Create .env file for Docker Compose variable interpolation
+   cp .env.example .env
+   # Edit .env with your values (or keep defaults for local dev)
+
+   # Create docker-compose override for container configuration
    cp docker-compose.override.example.yml docker-compose.override.yml
    # Edit docker-compose.override.yml with your local values
    ```
@@ -122,10 +127,18 @@ Network: backend-network (bridge)
    docker-compose up -d
    ```
 
-6. **Access WordPress**
-   - Home site: http://localhost:8080
-   - Customer sites: http://localhost:8090
-   - Complete WordPress installation wizard for each site
+6. **WordPress is automatically installed!**
+   - WordPress automatically installs on first startup using WP CLI
+   - No installation wizard needed - sites are immediately ready to use
+   - Default admin credentials (from docker-compose.override.yml):
+     - Username: `admin`
+     - Password: `local_wp_password` (both home site and customer sites)
+   - Access sites:
+     - Home site: http://localhost:8080
+     - Customer sites: http://localhost:8090
+   - Admin dashboards:
+     - Home site: http://localhost:8080/wp/wp-admin
+     - Customer sites: http://localhost:8090/wp/wp-admin
 
 ### Monorepo Commands
 
@@ -183,13 +196,18 @@ For detailed architecture diagrams, see [docs/architecture/docker-environments.m
 
 2. **Create local environment configuration**
    ```bash
+   # Create .env file for Docker Compose variable interpolation
+   cp .env.example .env
+
+   # Create docker-compose override for container configuration
    cp docker-compose.override.example.yml docker-compose.override.yml
    ```
 
 3. **Update `docker-compose.override.yml` with your local values**
    - Set database credentials
    - Configure local domain (e.g., `home.localhost`)
-   - Generate WordPress security keys at https://roots.io/salts.html
+   - Generate WordPress security keys at https://roots.io/salts.html (use only alphanumeric characters)
+   - Set WordPress admin credentials (WP_ADMIN_USER, WP_ADMIN_PASSWORD, WP_ADMIN_EMAIL)
    - Set `WP_ENV=development`
 
 4. **Build and start services**
@@ -213,6 +231,35 @@ For detailed architecture diagrams, see [docs/architecture/docker-environments.m
 - **WordPress Customer Sites**: http://localhost:8090 (direct nginx access)
 - **MySQL**: localhost:3306 (if port exposed in override file)
 - **Traefik Dashboard**: Not yet configured
+
+### Automatic WordPress Installation
+
+WordPress is automatically installed on first container startup using WP CLI. This eliminates the need to manually complete the installation wizard.
+
+**How it works:**
+1. Container starts and waits for database to be ready
+2. Checks if WordPress is already installed (using `wp core is-installed`)
+3. If not installed, runs `wp core install` with credentials from environment variables
+4. Starts PHP-FPM
+
+**Configuration:**
+WordPress installation is configured via environment variables:
+- `WP_ADMIN_USER` - Admin username (default: `admin`)
+- `WP_ADMIN_PASSWORD` - Admin password
+- `WP_ADMIN_EMAIL` - Admin email
+- `WP_SITE_TITLE` - Site title
+
+**Default credentials for local development:**
+- Home site: `admin` / `local_wp_password`
+- Customer sites: `admin` / `local_wp_password`
+
+**Idempotency:**
+The installation is idempotent - restarting containers will NOT reinstall WordPress if it's already installed. You can safely restart services without losing data.
+
+**Troubleshooting:**
+- View installation logs: `docker-compose logs wp-home-site-php`
+- Check WordPress status: `docker-compose exec wp-home-site-php wp core is-installed`
+- Verify database connection: `docker-compose exec wp-home-site-php wp db check`
 
 ### Local Development Workflow
 
@@ -258,16 +305,16 @@ Both approaches work identically and produce the same result.
 
 ```bash
 # Connect to home site database
-docker-compose exec db mysql -u wp_home_user -p wp_home_site
+docker-compose exec db mysql -u wp_home_db_user -p wp_home_site_db
 
 # Connect to customer sites database
-docker-compose exec db mysql -u wp_customers_user -p wp_customer_sites
+docker-compose exec db mysql -u wp_customers_user -p wp_customer_sites_db
 
 # Import database dump (home site)
-docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site < backup.sql
+docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site_db < backup.sql
 
 # Import database dump (customer sites)
-docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_customer_sites < backup.sql
+docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_customer_sites_db < backup.sql
 ```
 
 ### Stopping Services
@@ -299,7 +346,7 @@ Add these secrets to your GitHub repository (Settings → Secrets and variables 
 - `MYSQL_ROOT_PASSWORD` - MySQL root password
 
 #### wp-home-site Secrets
-- `WP_HOME_DB_NAME` - Database name (e.g., `wp_home_site`)
+- `WP_HOME_DB_NAME` - Database name (e.g., `wp_home_site_db`)
 - `WP_HOME_DB_USER` - Database user
 - `WP_HOME_DB_PASSWORD` - Database password
 - `WP_HOME_ENV` - WordPress environment (`production`)
@@ -313,7 +360,7 @@ Add these secrets to your GitHub repository (Settings → Secrets and variables 
 - `WP_HOME_NONCE_SALT` - WordPress nonce salt
 
 #### wp-customer-sites Secrets
-- `WP_CUSTOMERS_DB_NAME` - Database name (e.g., `wp_customer_sites`)
+- `WP_CUSTOMERS_DB_NAME` - Database name (e.g., `wp_customer_sites_db`)
 - `WP_CUSTOMERS_DB_USER` - Database user
 - `WP_CUSTOMERS_DB_PASSWORD` - Database password
 - `WP_CUSTOMERS_ENV` - WordPress environment (`production`)
@@ -622,10 +669,10 @@ Access at: http://localhost:8080
 
 ```bash
 # Backup home site database
-docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site > wp_home_site_backup.sql
+docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site_db > wp_home_site_backup.sql
 
 # Backup customer sites database
-docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_customer_sites > wp_customer_sites_backup.sql
+docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" wp_customer_sites_db > wp_customer_sites_backup.sql
 
 # Backup all databases
 docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --all-databases > all_databases_backup.sql
@@ -634,7 +681,7 @@ docker-compose exec db mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --all-database
 ### Restore Database
 
 ```bash
-docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site < wp_home_site_backup.sql
+docker-compose exec -T db mysql -u root -p"$MYSQL_ROOT_PASSWORD" wp_home_site_db < wp_home_site_backup.sql
 ```
 
 ### MySQL Configuration
@@ -698,7 +745,7 @@ docker-compose ps db
 docker inspect backend-db | grep -A 10 Health
 
 # Test connection
-docker-compose exec wp-home-site-php php -r "mysqli_connect('mysql', 'wp_home_user', 'password', 'wp_home_site') or die(mysqli_connect_error());"
+docker-compose exec wp-home-site-php php -r "mysqli_connect('mysql', 'wp_home_db_user', 'password', 'wp_home_site_db') or die(mysqli_connect_error());"
 ```
 
 ### SSL Certificate Issues

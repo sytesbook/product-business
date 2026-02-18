@@ -63,7 +63,7 @@ This document provides detailed architectural diagrams comparing the local devel
 │  │  │  backend-db (mysql:8.4)                                  ││ │
 │  │  │  Port: 3306 (exposed to host)                           ││ │
 │  │  │  Volume: db_data:/var/lib/mysql (persisted)             ││ │
-│  │  │  Databases: wp_home_site, wp_customer_sites             ││ │
+│  │  │  Databases: wp_home_site_db, wp_customer_sites_db             ││ │
 │  │  │  Init scripts: ./infrastructure/mysql/init              ││ │
 │  │  └──────────────────────────────────────────────────────────┘│ │
 │  │                                                                │ │
@@ -201,7 +201,7 @@ KEY FEATURES - Local Development:
 │  │  │  backend-db (mysql:8.4)                                  ││ │
 │  │  │  Port: 3306 (internal only)                             ││ │
 │  │  │  Volume: db_data:/var/lib/mysql (EBS-backed)            ││ │
-│  │  │  Databases: wp_home_site, wp_customer_sites             ││ │
+│  │  │  Databases: wp_home_site_db, wp_customer_sites_db             ││ │
 │  │  │  Environment: From GitHub Secrets                        ││ │
 │  │  │  Backups: Automated via AWS or cron                     ││ │
 │  │  └──────────────────────────────────────────────────────────┘│ │
@@ -427,11 +427,11 @@ Configuration via `docker-compose.override.yml` (gitignored):
 services:
   db:
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_local
-      WP_HOME_DB_USER: wp_home_user
-      WP_HOME_DB_PASSWORD: local_password
+      MYSQL_ROOT_PASSWORD: root_db_password_local
+      WP_HOME_DB_USER: wp_home_db_user
+      WP_HOME_DB_PASSWORD: local_db_password
       WP_CUSTOMERS_DB_USER: wp_customers_user
-      WP_CUSTOMERS_DB_PASSWORD: local_password
+      WP_CUSTOMERS_DB_PASSWORD: local_db_password
     ports:
       - "3306:3306"  # Exposed for GUI tools
 
@@ -441,9 +441,9 @@ services:
     volumes:
       - ./services/wp-home-site:/var/www/html  # Mount source
     environment:
-      DB_NAME: wp_home_site
-      DB_USER: wp_home_user
-      DB_PASSWORD: local_password
+      DB_NAME: wp_home_site_db
+      DB_USER: wp_home_db_user
+      DB_PASSWORD: local_db_password
       WP_ENV: development
       WP_HOME: http://localhost:8080
       WP_DEBUG: "true"
@@ -461,9 +461,9 @@ services:
     volumes:
       - ./services/wp-customer-sites:/var/www/html  # Mount source
     environment:
-      DB_NAME: wp_customer_sites
+      DB_NAME: wp_customer_sites_db
       DB_USER: wp_customers_user
-      DB_PASSWORD: local_password
+      DB_PASSWORD: local_db_password
       WP_ENV: development
       WP_HOME: http://localhost:8090
       WP_DEBUG: "true"

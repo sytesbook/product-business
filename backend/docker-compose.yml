@@ -1,3 +1,5 @@
+name: sytesbook-business-backend
+
 services:
   db:
     image: mysql:8.4
@@ -23,8 +25,8 @@ services:
 
   wp-home-site-php:
     build:
-      context: ./services/wp-home-site
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/wp-home-site/Dockerfile
       target: production
     container_name: wp-home-site-php
     restart: unless-stopped
@@ -45,6 +47,11 @@ services:
       SECURE_AUTH_SALT: ${WP_HOME_SECURE_AUTH_SALT}
       LOGGED_IN_SALT: ${WP_HOME_LOGGED_IN_SALT}
       NONCE_SALT: ${WP_HOME_NONCE_SALT}
+      # WordPress auto-installation
+      WP_ADMIN_USER: ${WP_HOME_ADMIN_USER}
+      WP_ADMIN_PASSWORD: ${WP_HOME_ADMIN_PASSWORD}
+      WP_ADMIN_EMAIL: ${WP_HOME_ADMIN_EMAIL}
+      WP_SITE_TITLE: ${WP_HOME_SITE_TITLE:-Business Sytesbook Home}
     volumes:
       - wp_home_uploads:/var/www/html/web/app/uploads
     depends_on:
@@ -69,8 +76,8 @@ services:
 
   wp-customer-sites-php:
     build:
-      context: ./services/wp-customer-sites
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/wp-customer-sites/Dockerfile
       target: production
     container_name: wp-customer-sites-php
     restart: unless-stopped
@@ -91,6 +98,11 @@ services:
       SECURE_AUTH_SALT: ${WP_CUSTOMERS_SECURE_AUTH_SALT}
       LOGGED_IN_SALT: ${WP_CUSTOMERS_LOGGED_IN_SALT}
       NONCE_SALT: ${WP_CUSTOMERS_NONCE_SALT}
+      # WordPress auto-installation
+      WP_ADMIN_USER: ${WP_CUSTOMERS_ADMIN_USER}
+      WP_ADMIN_PASSWORD: ${WP_CUSTOMERS_ADMIN_PASSWORD}
+      WP_ADMIN_EMAIL: ${WP_CUSTOMERS_ADMIN_EMAIL}
+      WP_SITE_TITLE: ${WP_CUSTOMERS_SITE_TITLE:-Business Sytesbook Customers}
     volumes:
       - wp_customers_uploads:/var/www/html/web/app/uploads
     depends_on:
