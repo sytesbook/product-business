@@ -1,47 +1,161 @@
 # Business Sytesbook Backend
 
-Centralized Docker orchestration for all backend microservices including WordPress sites, Laravel APIs, and shared infrastructure.
+A Composer-based monorepo containing all backend services, shared packages, and infrastructure for the Business Sytesbook platform.
 
-## Architecture
+## Overview
+
+The backend is structured as a PHP monorepo with:
+- **Centralized Docker orchestration** for all microservices
+- **Path repositories** for sharing packages between services
+- **Complete dependency isolation** - each service has its own `vendor/` directory
+- **Multi-stage Docker builds** for development and production
+
+## Monorepo Structure
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         Traefik                              │
-│              (Reverse Proxy + SSL/TLS)                       │
-│                  Port 80, 443                                │
-└─────────────────────────────────────────────────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐
-│  wp-home-site    │  │  wp-admin-site   │  │  Laravel API │
-│     (Nginx)      │  │     (Nginx)      │  │   (Nginx)    │
-│       │          │  │       │          │  │      │       │
-│       ▼          │  │       ▼          │  │      ▼       │
-│   PHP-FPM        │  │   PHP-FPM        │  │  PHP-FPM     │
-│  (WordPress)     │  │  (WordPress)     │  │  (Laravel)   │
-└──────────────────┘  └──────────────────┘  └──────────────┘
-         │                    │                    │
-         └────────────────────┴────────────────────┘
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │   MySQL 8.4 LTS  │
-                    │   (Shared DB)    │
-                    │   Port 3306      │
-                    └──────────────────┘
+backend/
+├── composer.json                # Root orchestrator with monorepo scripts
+├── scripts/                     # Orchestration scripts (composer-foreach, composer-clean, etc.)
+├── services/                    # Independent microservices (applications)
+│   └── wp-home-site/           # Bedrock WordPress site
+├── packages/                    # Shared libraries (consumed by services)
+│   └── (future shared packages)
+├── tools/                       # Development utilities
+├── infrastructure/              # Infrastructure configuration
+│   └── mysql/init/             # MySQL init scripts
+├── docker-compose.yml           # Base Docker services
+└── docker-compose.override.example.yml  # Local dev template
 ```
 
-### Services
+## Current Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   Browser / Client                        │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         │ HTTP (Local: 8080, Prod: 80)
+                         ▼
+            ┌────────────────────────────┐
+            │   wp-home-site-nginx       │
+            │   (nginx:alpine)           │
+            │   - Serves static files    │
+            │   - Routes PHP to FPM      │
+            └────────────┬───────────────┘
+                         │ FastCGI (9000)
+                         ▼
+            ┌────────────────────────────┐
+            │   wp-home-site-php         │
+            │   (PHP 8.3-FPM)            │
+            │   - Bedrock WordPress      │
+            │   - Multi-stage build      │
+            │   - Development/Production │
+            └────────────┬───────────────┘
+                         │ MySQL (3306)
+                         ▼
+            ┌────────────────────────────┐
+            │   backend-mysql            │
+            │   (MySQL 8.4 LTS)          │
+            │   - Shared database        │
+            │   - Persisted data         │
+            └────────────────────────────┘
+
+Network: backend-network (bridge)
+```
+
+**Note:** Traefik reverse proxy planned for future multi-service routing and SSL termination.
+
+### Current Services
+
+- **backend-mysql**: Shared MySQL 8.4 LTS instance for all services
+- **wp-home-site-php**: PHP 8.3-FPM running Bedrock WordPress
+- **wp-home-site-nginx**: Nginx web server for static files and FastCGI proxy
+
+### Future Services
 
 - **Traefik**: Reverse proxy with automatic HTTPS via Let's Encrypt
-- **MySQL**: Shared database instance for all services (MySQL 8.4 LTS)
-- **wp-home-site**: Bedrock WordPress site for public-facing content
-- **wp-admin-site**: (Future) Bedrock WordPress site for admin portal
-- **Laravel API**: (Future) Laravel API service
+- **wp-admin-site**: Additional Bedrock WordPress site for admin portal
+- **Laravel API**: Laravel-based API service
+- More services as needed...
 
-### Networking
+## Quick Start
 
-All services communicate via `backend-network` Docker bridge network. Services reference each other by container name (e.g., `mysql:3306`, `wp-home-site-php:9000`).
+### Prerequisites
+
+- Docker 20.10+
+- Docker Compose 2.0+
+- Composer 2.0+ (optional, for local development)
+
+### Initial Setup
+
+1. **Clone and navigate**
+   ```bash
+   git clone <repository-url>
+   cd product-business/backend
+   ```
+
+2. **Install root dependencies (monorepo tools)**
+   ```bash
+   composer install
+   ```
+
+3. **Install service dependencies**
+   ```bash
+   composer install:all
+   ```
+
+4. **Configure local environment**
+   ```bash
+   cp docker-compose.override.example.yml docker-compose.override.yml
+   # Edit docker-compose.override.yml with your local values
+   ```
+
+5. **Start services**
+   ```bash
+   docker-compose up -d
+   ```
+
+6. **Access WordPress**
+   - Local: http://localhost:8080
+   - Complete WordPress installation wizard
+
+### Monorepo Commands
+
+Execute operations across all workspaces (services, packages, tools):
+
+```bash
+composer list:workspaces      # List all workspaces
+composer install:all          # Install dependencies in all workspaces
+composer update:all           # Update all workspaces
+composer test                 # Run tests across all workspaces
+composer lint                 # Lint all workspaces
+composer quality              # Run all quality checks
+composer clean                # Clean vendor/ and caches
+```
+
+See [claude.md](claude.md) for detailed monorepo workflows and conventions.
+
+## Architecture: Local vs Production
+
+The backend uses different configurations for local development and production deployments:
+
+| Aspect | Local Development | Production (EC2) |
+|--------|------------------|------------------|
+| **Code Location** | Mounted from host | Baked into Docker image |
+| **Live Reload** | ✅ Yes (edit files, see changes) | ❌ No (rebuild required) |
+| **Build Target** | `development` | `production` |
+| **Composer** | Available in container | Not included (removed after build) |
+| **Opcache** | Validates timestamps | Never validates (immutable) |
+| **Port** | 8080 → 80 | 80 (future: Traefik 443) |
+| **MySQL Access** | Exposed on 3306 | Internal only |
+| **Debug Mode** | WP_DEBUG=true | WP_DEBUG=false |
+| **Config** | docker-compose.override.yml | GitHub Secrets → env vars |
+
+**Key Differences:**
+- **Local**: Source code volume-mounted for instant changes, includes dev tools
+- **Production**: Code copied during build (immutable deployment), minimal runtime image
+
+For detailed architecture diagrams, see [docs/architecture/docker-environments.md](../docs/architecture/docker-environments.md).
 
 ## Local Development Setup
 
@@ -87,9 +201,9 @@ All services communicate via `backend-network` Docker bridge network. Services r
 
 ### Accessing Services Locally
 
-- **WordPress Site**: http://home.localhost (configured in `docker-compose.override.yml`)
-- **Traefik Dashboard**: http://localhost:8080 (if enabled)
+- **WordPress Site**: http://localhost:8080 (direct nginx access)
 - **MySQL**: localhost:3306 (if port exposed in override file)
+- **Traefik Dashboard**: Not yet configured
 
 ### Local Development Workflow
 

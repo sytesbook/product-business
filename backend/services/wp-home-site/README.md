@@ -2,19 +2,22 @@
 
 WordPress home site service for Business Sytesbook, built with [Bedrock](https://roots.io/bedrock/) - a modern WordPress boilerplate with Composer, improved security, and better project structure.
 
+**Part of the [Business Sytesbook Backend Monorepo](../../README.md)**
+
 ## Architecture
 
 This service uses:
 - **Bedrock** - Modern WordPress project structure
 - **PHP 8.3+** - Latest PHP with strict typing
 - **Composer** - Dependency management for WordPress core, plugins, and themes
-- **Docker** - Containerized environment (PHP-FPM, MySQL, Nginx)
+- **Docker** - Containerized environment (PHP-FPM, shared MySQL, Nginx)
 - **Environment-based configuration** - Following 12-factor methodology
+- **Monorepo structure** - Part of backend workspace with path repositories for shared packages
 
 ## Directory Structure
 
 ```
-.
+backend/services/wp-home-site/
 ├── config/                      # Application configuration
 │   ├── application.php          # Main configuration
 │   └── environments/            # Environment-specific overrides
@@ -22,65 +25,71 @@ This service uses:
 │       ├── staging.php
 │       └── production.php
 ├── src/                         # Custom PHP code (Sytesbook\Business\Services\WpHomeSite namespace)
-├── vendor/                      # Composer dependencies (not in git)
+├── vendor/                      # Composer dependencies (isolated, not in git)
+│   └── sytesbook/              # May include symlinks to ../../packages/* (monorepo packages)
 ├── web/                         # Public web root
 │   ├── app/                     # WordPress content directory
 │   │   ├── mu-plugins/         # Must-use plugins (via Composer)
 │   │   ├── plugins/            # Regular plugins (via Composer)
 │   │   ├── themes/             # Themes (via Composer or custom)
-│   │   └── uploads/            # Media uploads (persisted in Docker)
-│   └── wp/                      # WordPress core (via Composer)
-├── composer.json                # Dependencies
-├── Dockerfile                   # PHP 8.3-FPM container
-├── docker-compose.yml           # Base Docker services
-├── docker-compose.override.example.yml  # Environment template
-├── nginx.conf                   # Nginx configuration
+│   │   └── uploads/            # Media uploads (persisted in Docker volume)
+│   └── wp/                      # WordPress core (via Composer - roots/wordpress)
+├── composer.json                # Service dependencies (roots/wordpress, plugins, themes)
+├── composer.lock                # Locked dependency versions (in git)
+├── Dockerfile                   # Multi-stage build (builder, production, development)
+├── nginx.conf                   # Nginx web server configuration
 └── README.md                    # This file
+
+Docker orchestration managed at: ../../docker-compose.yml
 ```
+
+**Monorepo Structure:**
+- This service is part of `/backend` monorepo
+- Root orchestrator: `/backend/composer.json`
+- Shared packages: `/backend/packages/` (can be consumed via path repositories)
+- Docker config: `/backend/docker-compose.yml` (centralized)
 
 ## Prerequisites
 
-- Docker & Docker Compose
-- Composer (for local development)
-- PHP 8.3+ (if running outside Docker)
+- Docker 20.10+ & Docker Compose 2.0+
+- Composer 2.0+ (for local development and monorepo management)
 
 ## Local Development Setup
 
-### 1. Configure Environment
+**Note:** This service uses centralized Docker orchestration. All commands run from `/backend` directory.
 
-Copy the environment template and update with your local settings:
+### 1. Initial Monorepo Setup
 
 ```bash
+# From backend/ directory
+cd ../../
+composer install        # Install root monorepo dependencies
+composer install:all    # Install dependencies in all workspaces (including this service)
+```
+
+### 2. Configure Environment
+
+```bash
+# From backend/ directory
 cp docker-compose.override.example.yml docker-compose.override.yml
 ```
 
 Edit `docker-compose.override.yml` and update:
-- Database credentials (`MYSQL_PASSWORD`, `DB_PASSWORD`)
+- Database credentials
 - WordPress security keys (generate at https://roots.io/salts.html)
 - `WP_HOME` URL (default: http://localhost:8080)
 
-### 2. Start Services
+### 3. Start Services
 
 ```bash
+# From backend/ directory
 docker-compose up -d
 ```
 
-This will start:
-- **MySQL 8.4 LTS** - Database server (port 3306)
-- **PHP 8.3-FPM** - PHP processing
-- **Nginx** - Web server (port 8080)
-
-### 3. Install Dependencies (Optional)
-
-The Dockerfile automatically runs `composer install` when building the container, but if you need to reinstall dependencies:
-
-```bash
-# Using local Composer
-composer install
-
-# OR using Docker Composer
-docker-compose exec php composer install
-```
+This starts:
+- **backend-mysql** - Shared MySQL 8.4 LTS (port 3306)
+- **wp-home-site-php** - PHP 8.3-FPM (development build)
+- **wp-home-site-nginx** - Nginx web server (port 8080)
 
 ### 4. Access WordPress
 
@@ -89,12 +98,10 @@ Navigate to http://localhost:8080 and complete the WordPress installation wizard
 ### 5. Stop Services
 
 ```bash
+# From backend/ directory
 docker-compose down
-```
 
-To remove all data (including database):
-
-```bash
+# Remove all data including database:
 docker-compose down -v
 ```
 
@@ -126,16 +133,17 @@ composer require wpackagist-theme/generatepress
 If you don't have Composer installed locally or prefer to use the containerized version:
 
 ```bash
-cd backend/services/wp-home-site
+# From backend/ directory (not service directory)
+cd ../../
 
 # Install plugins
-docker-compose exec php composer require wpackagist-plugin/wordpress-seo
+docker-compose exec wp-home-site-php composer require wpackagist-plugin/wordpress-seo
 
 # Install themes
-docker-compose exec php composer require wpackagist-theme/astra
+docker-compose exec wp-home-site-php composer require wpackagist-theme/astra
 ```
 
-**Both approaches work identically** since the service directory is mounted into the container. Use whichever is more convenient for your workflow.
+**Both approaches work identically** since the service directory is volume-mounted into the container during development.
 
 Plugins are automatically installed to `web/app/plugins/` and themes to `web/app/themes/`. Activate them in WordPress admin.
 
@@ -143,13 +151,15 @@ Plugins are automatically installed to `web/app/plugins/` and themes to `web/app
 
 ```bash
 # Using local Composer (recommended)
+cd backend/services/wp-home-site
 composer update                                    # Update all dependencies
 composer update roots/wordpress                    # Update WordPress core
 composer update wpackagist-plugin/wordpress-seo    # Update specific plugin
 
-# OR using Docker Composer
-docker-compose exec php composer update
-docker-compose exec php composer update roots/wordpress
+# OR using Docker Composer (from backend/ directory)
+cd ../../
+docker-compose exec wp-home-site-php composer update
+docker-compose exec wp-home-site-php composer update roots/wordpress
 ```
 
 ### Private or Custom Plugins/Themes
@@ -207,12 +217,17 @@ Bedrock includes Laravel Pint for code formatting:
 
 ```bash
 # Using local Composer
+cd backend/services/wp-home-site
 composer lint         # Check code style
 composer lint:fix     # Fix code style
 
-# OR using Docker Composer
-docker-compose exec php composer lint
-docker-compose exec php composer lint:fix
+# OR using Docker Composer (from backend/ directory)
+cd ../../
+docker-compose exec wp-home-site-php composer lint
+docker-compose exec wp-home-site-php composer lint:fix
+
+# Run lint across all monorepo workspaces
+composer lint        # From backend/ root
 ```
 
 ## Deployment
@@ -249,28 +264,41 @@ For staging/production:
 
 ## Troubleshooting
 
+**Note:** All docker-compose commands run from `/backend` directory.
+
 ### Cannot connect to database
 
 Check that MySQL container is healthy:
 ```bash
+cd ../../
 docker-compose ps
-docker-compose logs mysql
+docker-compose logs backend-mysql
 ```
 
 ### Permission errors
 
 Reset permissions on uploads directory:
 ```bash
-docker-compose exec php chown -R www-data:www-data /var/www/html/web/app/uploads
-docker-compose exec php chmod -R 775 /var/www/html/web/app/uploads
+cd ../../
+docker-compose exec wp-home-site-php chown -R www-data:www-data /var/www/html/web/app/uploads
+docker-compose exec wp-home-site-php chmod -R 775 /var/www/html/web/app/uploads
 ```
 
 ### WordPress installation loop
 
-Verify environment variables are set correctly in `docker-compose.override.yml` and restart:
+Verify environment variables are set correctly in `/backend/docker-compose.override.yml` and restart:
 ```bash
+cd ../../
 docker-compose down
 docker-compose up -d
+```
+
+### View service logs
+
+```bash
+cd ../../
+docker-compose logs -f wp-home-site-php
+docker-compose logs -f wp-home-site-nginx
 ```
 
 ## Resources
