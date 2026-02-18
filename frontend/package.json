@@ -1,0 +1,28 @@
+{
+  "name": "@sytesbook/business-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Frontend monorepo for Business Sytesbook",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "type-check": "pnpm -r type-check",
+    "dev": "pnpm -r --parallel dev",
+    "clean": "pnpm -r exec rm -rf dist node_modules .turbo"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/node": "catalog:",
+    "vitest": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

@@ -1,0 +1,64 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Terraform lock file (commit this to lock provider versions)
+# Uncomment if you want to ignore it:
+# .terraform.lock.hcl
+
+# Sensitive files
+secrets.tfvars
+*.auto.tfvars
+
+# Environment-specific files that may contain secrets
+backend-config.hcl
+*.backend.hcl
+
+# Local .terraform directories
+**/.terraform.lock.hcl
+
+# Module cache
+.terraform.d/
+
+# Sentinel runtime directory
+.sentinel
+
+# Build artifacts
+*.zip
+*.tar.gz
+
+# Logs
+*.log
+
+# OS specific
+.DS_Store
+
+# Editor specific
+*.swp
+*.swo
+*~
+
+# Python (if using Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Node (if using CDK or similar)
+node_modules/
+
+# Ignore plan output files
+plan.txt
+plan.json

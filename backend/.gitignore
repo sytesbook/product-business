@@ -1,0 +1,58 @@
+# Composer
+/vendor/
+composer.phar
+composer.lock
+
+# PHPUnit
+.phpunit.result.cache
+/phpunit.xml
+/coverage/
+/.phpunit.cache
+
+# PHP-CS-Fixer
+.php-cs-fixer.cache
+.php_cs.cache
+
+# PHPStan
+.phpstan.cache
+phpstan.neon.local
+
+# Psalm
+psalm.xml.local
+.psalm/
+
+# PHP
+*.php~
+.php_tmp
+
+# Build artifacts
+/build/
+/dist/
+
+# Cache
+/cache/
+*.cache
+
+# Logs
+/logs/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.test
+.env.production
+
+# Docker
+docker-compose.override.yml
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE specific (additional to root)
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
