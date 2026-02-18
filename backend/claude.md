@@ -65,43 +65,162 @@ Follow **PSR-12** coding standards with additional rules:
 
 ### Namespaces
 
-- Services: `ProductBusiness\Services\[ServiceName]\`
-- Packages: `ProductBusiness\[PackageName]\`
-- Tools: `ProductBusiness\Tools\[ToolName]\`
+- Services: `Sytesbook\Business\Services\[ServiceName]\`
+- Packages: `Sytesbook\Business\Packages\[PackageName]\`
+- Tools: `Sytesbook\Business\Tools\[ToolName]\`
+
+## Monorepo Structure
+
+The backend uses a **Composer-based monorepo** with path repositories for sharing code between services and packages. Each service maintains complete dependency isolation with its own `vendor/` directory.
+
+### Directory Structure
+
+```
+backend/
+├── composer.json       # Root orchestrator with monorepo scripts
+├── scripts/            # Orchestration scripts for managing workspaces
+├── services/           # Independent microservices (applications)
+├── packages/           # Shared libraries (consumed by services)
+└── tools/              # Development utilities
+```
+
+### Dependency Isolation
+
+**IMPORTANT:** Each service has isolated dependencies:
+- Each service has its **own** `composer.json` with only its dependencies
+- Each service has its **own** `vendor/` directory
+- Services do NOT inherit root dependencies
+- Root `composer.json` is only for orchestration scripts
+
+When a service requires a local package:
+- The package **code** is symlinked from `packages/`
+- The package's **dependencies** are installed in the service's `vendor/`
+- This means dependencies may be duplicated across services
+
+### Root-Level Commands
+
+Execute operations across all workspaces (services, packages, tools):
+
+```bash
+# Install dependencies in all workspaces
+composer install:all
+
+# Update dependencies in all workspaces
+composer update:all
+
+# Run tests across all workspaces
+composer test
+
+# Lint code across all workspaces
+composer lint
+composer lint:fix
+
+# Static analysis across all workspaces
+composer analyse
+
+# Run all quality checks (test, lint, analyse)
+composer quality
+
+# Clean vendor directories and caches
+composer clean
+
+# List all workspaces
+composer list:workspaces
+
+# Validate all composer.json files
+composer validate:all
+```
+
+These commands use orchestration scripts in `scripts/` to execute operations sequentially across all discovered workspaces.
 
 ## Composer Commands
 
-### Managing Dependencies
+### Initial Setup
 
 ```bash
-# Install dependencies for all packages
-composer install
+# From backend/ directory
+composer install        # Install root orchestration dependencies
+composer install:all    # Install dependencies in all workspaces
+```
 
-# Update dependencies
-composer update
+### Managing Dependencies
 
-# Add a dependency to a specific service
-cd services/user-service
-composer require vendor/package
+**Root-level operations** (affects all workspaces):
+```bash
+composer update:all     # Update all workspaces
+composer test          # Test all workspaces
+composer quality       # Run all quality checks
+```
 
-# Add a development dependency
-composer require --dev vendor/package
+**Service-level operations** (affects single workspace):
+```bash
+cd services/wp-home-site
+composer require vendor/package           # Add dependency
+composer require --dev vendor/package     # Add dev dependency
+composer update                          # Update this service only
+composer test                           # Test this service only
 ```
 
 ### Working with Local Packages
 
-Services can depend on local packages using path repositories:
+Services can consume local packages via path repositories. The package code is symlinked but dependencies are isolated.
 
+**1. Create a package:**
+```bash
+cd packages
+mkdir logging
+cd logging
+
+# Create composer.json
+cat > composer.json << 'EOF'
+{
+  "name": "sytesbook/business-logging",
+  "type": "library",
+  "require": {
+    "php": "^8.3",
+    "monolog/monolog": "^3.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Sytesbook\\Business\\Packages\\Logging\\": "src/"
+    }
+  }
+}
+EOF
+
+mkdir -p src
+composer install
+```
+
+**2. Use package in a service:**
+```bash
+cd ../../services/wp-home-site
+
+# Add path repository to composer.json
+# (or use wildcard: ../../packages/*)
+composer config repositories.logging path ../../packages/logging
+
+# Require the package
+composer require sytesbook/business-logging:@dev
+```
+
+**Result:**
+- Package code is symlinked to `vendor/sytesbook/business-logging/`
+- Package dependencies (monolog) are installed in service's `vendor/`
+- Changes to package code are immediately available (no reinstall needed)
+
+**Path Repository Pattern in composer.json:**
 ```json
 {
   "repositories": [
     {
       "type": "path",
-      "url": "../../packages/common"
+      "url": "../../packages/*",
+      "options": {"symlink": false}
     }
   ],
   "require": {
-    "product-business/common": "*"
+    "sytesbook/business-logging": "@dev"
   }
 }
 ```
@@ -217,7 +336,7 @@ cd my-package
 # Create composer.json
 cat > composer.json << 'EOF'
 {
-  "name": "product-business/my-package",
+  "name": "sytesbook/business-my-package",
   "description": "Description of the package",
   "type": "library",
   "require": {
@@ -228,12 +347,12 @@ cat > composer.json << 'EOF'
   },
   "autoload": {
     "psr-4": {
-      "ProductBusiness\\MyPackage\\": "src/"
+      "Sytesbook\\Business\\Packages\\MyPackage\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "ProductBusiness\\MyPackage\\Tests\\": "tests/"
+      "Sytesbook\\Business\\Packages\\MyPackage\\Tests\\": "tests/"
     }
   }
 }

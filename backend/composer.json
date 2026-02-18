@@ -1,0 +1,95 @@
+{
+  "name": "sytesbook/business-backend",
+  "description": "Backend monorepo for Business Sytesbook",
+  "type": "project",
+  "license": "MIT",
+  "repositories": [
+    {
+      "type": "path",
+      "url": "./packages/*",
+      "options": {
+        "symlink": true
+      }
+    },
+    {
+      "type": "path",
+      "url": "./tools/*",
+      "options": {
+        "symlink": true
+      }
+    }
+  ],
+  "require": {
+    "php": "^8.3"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0",
+    "friendsofphp/php-cs-fixer": "^3.64",
+    "phpstan/phpstan": "^2.0",
+    "symfony/process": "^7.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "Sytesbook\\Business\\": "src/"
+    }
+  },
+  "scripts": {
+    "install:all": [
+      "@php scripts/composer-foreach.php install --no-interaction"
+    ],
+    "update:all": [
+      "@php scripts/composer-foreach.php update --no-interaction"
+    ],
+    "test": [
+      "@php scripts/composer-foreach.php test"
+    ],
+    "lint": [
+      "@php scripts/composer-foreach.php lint"
+    ],
+    "lint:fix": [
+      "@php scripts/composer-foreach.php lint:fix"
+    ],
+    "analyse": [
+      "@php scripts/composer-foreach.php analyse"
+    ],
+    "quality": [
+      "@test",
+      "@lint",
+      "@analyse"
+    ],
+    "clean": [
+      "@php scripts/composer-clean.php"
+    ],
+    "validate:all": [
+      "@php scripts/composer-foreach.php validate --strict --no-check-publish"
+    ],
+    "list:workspaces": [
+      "@php scripts/composer-list.php"
+    ]
+  },
+  "scripts-descriptions": {
+    "install:all": "Install dependencies for all workspaces (services, packages, tools)",
+    "update:all": "Update dependencies for all workspaces",
+    "test": "Run tests in all workspaces sequentially",
+    "lint": "Run linting in all workspaces",
+    "lint:fix": "Auto-fix linting issues in all workspaces",
+    "analyse": "Run static analysis in all workspaces",
+    "quality": "Run all quality checks (test, lint, analyse)",
+    "clean": "Remove vendor directories and caches from all workspaces",
+    "validate:all": "Validate composer.json files in all workspaces",
+    "list:workspaces": "List all workspaces (services, packages, tools)"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true,
+    "allow-plugins": {
+      "composer/installers": true,
+      "roots/wordpress-core-installer": true
+    },
+    "platform": {
+      "php": "8.3"
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

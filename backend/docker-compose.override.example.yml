@@ -3,35 +3,12 @@
 # docker-compose.override.yml is gitignored and contains your local secrets
 
 services:
-  traefik:
-    # For local dev, you can override the ACME email
-    command:
-      - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      # For local dev, you might want to disable HTTPS or use staging ACME
-      # - "--certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=dev@localhost"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-    environment:
-      - DOMAIN=localhost
-      - ACME_EMAIL=dev@localhost
-
   mysql:
     environment:
       MYSQL_ROOT_PASSWORD: root_password_local
       # User credentials for init script
       WP_HOME_DB_USER: wp_home_user
       WP_HOME_DB_PASSWORD: local_password
-      # Add more as you create services
-      # WP_ADMIN_DB_USER: wp_admin_user
-      # WP_ADMIN_DB_PASSWORD: local_password
-      # LARAVEL_DB_USER: laravel_user
-      # LARAVEL_DB_PASSWORD: local_password
     ports:
       # Expose MySQL port for local development (optional)
       - "3306:3306"
@@ -69,22 +46,6 @@ services:
     volumes:
       # Mount source code for nginx to serve static files
       - ./services/wp-home-site:/var/www/html:ro
-    labels:
-      # For local dev with Traefik
-      - "traefik.enable=true"
-      - "traefik.http.routers.wp-home.rule=Host(`home.localhost`)"
-      - "traefik.http.routers.wp-home.entrypoints=web"
-      - "traefik.http.services.wp-home.loadbalancer.server.port=80"
-
-# Add more service overrides as needed
-# Example for future wp-admin-site:
-#  wp-admin-site-php:
-#    build:
-#      target: development
-#    volumes:
-#      - ./services/wp-admin-site:/var/www/html
-#    environment:
-#      DB_NAME: wp_admin_site
-#      DB_USER: wp_admin_user
-#      DB_PASSWORD: local_password
-#      # ... etc
+    ports:
+      # Expose port directly for local access
+      - "8080:80"
