@@ -104,3 +104,24 @@ services:
     ports:
       # Expose port directly for local access
       - "8090:80"
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: backend-localstack
+    environment:
+      SERVICES: sns
+      DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    volumes:
+      # Mount init scripts; LocalStack runs ready.d/ scripts after startup
+      - ./infrastructure/localstack/init:/etc/localstack/init/ready.d:ro
+    ports:
+      # Expose LocalStack port for local tooling (aws CLI from host, etc.)
+      - "4566:4566"
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

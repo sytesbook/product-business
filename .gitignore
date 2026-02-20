@@ -39,6 +39,7 @@ Thumbs.db
 *.bak
 *.backup
 *.old
+*.drawio.bkp
 
 # Claude Code
 .claude/
