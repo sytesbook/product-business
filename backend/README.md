@@ -690,7 +690,7 @@ MySQL is configured with:
 - Character set: `utf8mb4`
 - Collation: `utf8mb4_unicode_ci`
 - Health check with automatic retries
-- Data persistence via `db_data` volume
+- Data persistence via `backend_db_data` volume
 
 ## Monitoring
 

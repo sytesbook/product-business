@@ -102,7 +102,7 @@ services:
     ports:
       - "3306:3306"  # Exposed in dev, internal in prod
     volumes:
-      - db_data:/var/lib/mysql  # Persistent data
+      - backend_db_data:/var/lib/mysql  # Persistent data
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping"]
@@ -249,7 +249,7 @@ networks:
 
 ```yaml
 volumes:
-  db_data:             # Database files
+  backend_db_data:             # Database files
   wp_home_uploads:     # WordPress home site media uploads
   wp_customers_uploads: # WordPress customer sites media uploads
 ```

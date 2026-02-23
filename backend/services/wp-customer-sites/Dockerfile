@@ -4,7 +4,7 @@
 # ==============================================================================
 # Stage 1: Builder - Install dependencies and build application
 # ==============================================================================
-FROM php:8.3-fpm-alpine AS builder
+FROM php:8.4-fpm-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -56,7 +56,7 @@ RUN composer dump-autoload --optimize --no-dev
 # ==============================================================================
 # Stage 2: Production - Minimal runtime image
 # ==============================================================================
-FROM php:8.3-fpm-alpine AS production
+FROM php:8.4-fpm-alpine AS production
 
 # Install runtime dependencies only (smaller image)
 RUN apk add --no-cache \

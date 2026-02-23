@@ -3,7 +3,7 @@
 # docker-compose.override.yml is gitignored and contains your local secrets
 
 services:
-  db:
+  backend-db:
     environment:
       MYSQL_ROOT_PASSWORD: root_db_password_local
       # User credentials for init script
@@ -11,6 +11,8 @@ services:
       WP_HOME_DB_PASSWORD: local_db_password
       WP_CUSTOMERS_DB_USER: wp_customers_db_user
       WP_CUSTOMERS_DB_PASSWORD: local_db_password
+      CONTENT_DB_USER: content_db_user
+      CONTENT_DB_PASSWORD: local_db_password
     ports:
       # Expose MySQL port for local development (optional)
       - "3306:3306"
@@ -28,7 +30,7 @@ services:
       DB_NAME: wp_home_site_db
       DB_USER: wp_home_db_user
       DB_PASSWORD: local_db_password
-      DB_HOST: db:3306
+      DB_HOST: backend-db:3306
       WP_ENV: development
       WP_HOME: http://localhost:8080
       WP_SITEURL: http://localhost:8080/wp
@@ -73,7 +75,7 @@ services:
       DB_NAME: wp_customer_sites_db
       DB_USER: wp_customers_db_user
       DB_PASSWORD: local_db_password
-      DB_HOST: db:3306
+      DB_HOST: backend-db:3306
       WP_ENV: development
       WP_HOME: http://localhost:8090
       WP_SITEURL: http://localhost:8090/wp
@@ -105,12 +107,43 @@ services:
       # Expose port directly for local access
       - "8090:80"
 
+  content-service-php:
+    # For local dev, use development target with volume mounts
+    build:
+      target: development
+    volumes:
+      # Mount source code for live reloading
+      - ./services/content-service:/var/www/html
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: backend-db
+      DB_PORT: "3306"
+      DB_DATABASE: content_db
+      DB_USERNAME: content_db_user
+      DB_PASSWORD: local_db_password
+      APP_NAME: content-service
+      APP_ENV: local
+      # Generate with: php artisan key:generate --show
+      APP_KEY: "base64:localdevkeychangemeplease000000000000000="
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8100
+      LOG_CHANNEL: stack
+      LOG_LEVEL: debug
+
+  content-service-nginx:
+    ports:
+      # Expose port directly for local access
+      - "8100:80"
+
   localstack:
     image: localstack/localstack:latest
     container_name: backend-localstack
     environment:
       SERVICES: sns
-      DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      DEFAULT_REGION: eu-central-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: eu-central-1
     volumes:
       # Mount init scripts; LocalStack runs ready.d/ scripts after startup
       - ./infrastructure/localstack/init:/etc/localstack/init/ready.d:ro

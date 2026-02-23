@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for wp-home-site Bedrock WordPress
+# Multi-stage Dockerfile for content-service Laravel application
 # Stages: builder, production, development
 
 # ==============================================================================
@@ -12,23 +12,17 @@ RUN apk add --no-cache \
     zip \
     unzip \
     libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    icu-dev \
-    oniguruma-dev
+    oniguruma-dev \
+    libxml2-dev
 
 # Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
-        gd \
-        mysqli \
-        pdo_mysql \
-        zip \
-        opcache \
-        intl \
-        mbstring \
-        exif
+RUN docker-php-ext-install -j$(nproc) \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    zip \
+    opcache \
+    bcmath
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -36,10 +30,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy composer files first (for better layer caching)
-COPY services/wp-home-site/composer.json services/wp-home-site/composer.lock ./
+# Copy composer.json first for better layer caching
+# Note: commit composer.lock after first build for reproducible installs
+COPY services/content-service/composer.json ./
 
-# Install dependencies (without scripts to avoid errors)
+# Install production dependencies (skip scripts; artisan is not available yet)
 RUN composer install \
     --no-dev \
     --no-scripts \
@@ -48,9 +43,9 @@ RUN composer install \
     --optimize-autoloader
 
 # Copy application code
-COPY services/wp-home-site/ .
+COPY services/content-service/ .
 
-# Run composer scripts and dump autoloader
+# Dump optimized autoloader
 RUN composer dump-autoload --optimize --no-dev
 
 # ==============================================================================
@@ -61,48 +56,34 @@ FROM php:8.4-fpm-alpine AS production
 # Install runtime dependencies only (smaller image)
 RUN apk add --no-cache \
     libzip \
-    libpng \
-    libjpeg-turbo \
-    freetype \
-    icu-libs \
     oniguruma \
-    su-exec \
-    mysql-client
+    libxml2
 
 # Install PHP extensions (same as builder)
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
-        gd \
-        mysqli \
-        pdo_mysql \
-        zip \
-        opcache \
-        intl \
-        mbstring \
-        exif
-
-# Install WP-CLI
-RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
-    && chmod +x wp-cli.phar \
-    && mv wp-cli.phar /usr/local/bin/wp \
-    && wp --info
+RUN docker-php-ext-install -j$(nproc) \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    zip \
+    opcache \
+    bcmath
 
 # Configure PHP for production
 RUN { \
         echo 'opcache.enable=1'; \
-        echo 'opcache.memory_consumption=256'; \
-        echo 'opcache.max_accelerated_files=20000'; \
+        echo 'opcache.memory_consumption=128'; \
+        echo 'opcache.max_accelerated_files=10000'; \
         echo 'opcache.validate_timestamps=0'; \
         echo 'opcache.revalidate_freq=0'; \
     } > /usr/local/etc/php/conf.d/opcache.ini
 
-# Configure upload limits
+# Configure PHP settings
 RUN { \
-        echo 'upload_max_filesize=64M'; \
-        echo 'post_max_size=64M'; \
+        echo 'upload_max_filesize=32M'; \
+        echo 'post_max_size=32M'; \
         echo 'memory_limit=256M'; \
-        echo 'max_execution_time=300'; \
-    } > /usr/local/etc/php/conf.d/uploads.ini
+        echo 'max_execution_time=60'; \
+    } > /usr/local/etc/php/conf.d/settings.ini
 
 # Configure PHP-FPM
 RUN { \
@@ -121,19 +102,23 @@ WORKDIR /var/www/html
 COPY --from=builder --chown=www-data:www-data /var/www/html /var/www/html
 
 # Copy entrypoint script
-COPY scripts/docker-wp-install.sh /usr/local/bin/docker-wp-install.sh
-RUN chmod +x /usr/local/bin/docker-wp-install.sh
+COPY scripts/docker-laravel-start.sh /usr/local/bin/docker-laravel-start.sh
+RUN chmod +x /usr/local/bin/docker-laravel-start.sh
 
-# Create uploads directory with correct permissions
-RUN mkdir -p /var/www/html/web/app/uploads \
-    && chown -R www-data:www-data /var/www/html/web/app/uploads \
-    && chmod -R 775 /var/www/html/web/app/uploads
+# Create writable directories with correct permissions
+RUN mkdir -p \
+        storage/framework/cache \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
 
 # Expose PHP-FPM port
 EXPOSE 9000
 
-# Use entrypoint script (starts PHP-FPM directly)
-ENTRYPOINT ["docker-wp-install.sh"]
+ENTRYPOINT ["docker-laravel-start.sh"]
 
 # ==============================================================================
 # Stage 3: Development - Includes dev dependencies and Composer
@@ -141,15 +126,10 @@ ENTRYPOINT ["docker-wp-install.sh"]
 FROM builder AS development
 
 # Install additional dev tools
-RUN apk add --no-cache mysql-client su-exec
+RUN apk add --no-cache mysql-client
 
 # Keep Composer in development
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-# Install WP-CLI
-RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
-    && chmod +x wp-cli.phar \
-    && mv wp-cli.phar /usr/local/bin/wp
 
 # Install all dependencies (including dev)
 RUN composer install \
@@ -157,31 +137,29 @@ RUN composer install \
     --no-interaction \
     --prefer-dist
 
-# Configure PHP for development
+# Configure PHP for development (validate timestamps for live reloading)
 RUN { \
         echo 'opcache.enable=1'; \
         echo 'opcache.validate_timestamps=1'; \
         echo 'opcache.revalidate_freq=2'; \
     } > /usr/local/etc/php/conf.d/opcache.ini
 
-# Configure upload limits (same as production)
+# Configure PHP settings
 RUN { \
-        echo 'upload_max_filesize=64M'; \
-        echo 'post_max_size=64M'; \
+        echo 'upload_max_filesize=32M'; \
+        echo 'post_max_size=32M'; \
         echo 'memory_limit=256M'; \
-        echo 'max_execution_time=300'; \
-    } > /usr/local/etc/php/conf.d/uploads.ini
+        echo 'max_execution_time=60'; \
+    } > /usr/local/etc/php/conf.d/settings.ini
 
 # Copy entrypoint script
-COPY scripts/docker-wp-install.sh /usr/local/bin/docker-wp-install.sh
-RUN chmod +x /usr/local/bin/docker-wp-install.sh
+COPY scripts/docker-laravel-start.sh /usr/local/bin/docker-laravel-start.sh
+RUN chmod +x /usr/local/bin/docker-laravel-start.sh
 
 WORKDIR /var/www/html
 
-# In development, we mount the code as a volume, so don't copy it
-# COPY . . is not needed here
+# In development, source code is volume-mounted — no COPY needed here
 
 EXPOSE 9000
 
-# Use entrypoint script (starts PHP-FPM directly)
-ENTRYPOINT ["docker-wp-install.sh"]
+ENTRYPOINT ["docker-laravel-start.sh"]

@@ -29,4 +29,14 @@ EOSQL
   echo "Created user: $WP_CUSTOMERS_DB_USER"
 fi
 
+# content-service user
+if [ -n "$CONTENT_DB_USER" ] && [ -n "$CONTENT_DB_PASSWORD" ]; then
+  MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -u root <<-EOSQL
+    CREATE USER IF NOT EXISTS '$CONTENT_DB_USER'@'%' IDENTIFIED BY '$CONTENT_DB_PASSWORD';
+    GRANT ALL PRIVILEGES ON \`content_db\`.* TO '$CONTENT_DB_USER'@'%';
+    FLUSH PRIVILEGES;
+EOSQL
+  echo "Created user: $CONTENT_DB_USER"
+fi
+
 echo "Database users created successfully!"
