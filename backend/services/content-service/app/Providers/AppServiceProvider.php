@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Queries\DoctrineRoutingTablesQuery;
+use App\Queries\RoutingTablesQuery;
 use App\Repositories\DoctrineDomainRepository;
 use App\Repositories\DoctrinePageRepository;
 use App\Repositories\DoctrineSiteRepository;
@@ -18,6 +20,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SiteRepositoryInterface::class, DoctrineSiteRepository::class);
         $this->app->bind(DomainRepositoryInterface::class, DoctrineDomainRepository::class);
         $this->app->bind(PageRepositoryInterface::class, DoctrinePageRepository::class);
+        $this->app->bind(RoutingTablesQuery::class, DoctrineRoutingTablesQuery::class);
     }
 
     public function boot(): void
