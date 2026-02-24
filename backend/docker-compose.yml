@@ -166,6 +166,26 @@ services:
     networks:
       - backend-network
 
+  router-service:
+    build:
+      context: .
+      dockerfile: services/router-service/Dockerfile
+      target: production
+    container_name: router-service
+    restart: unless-stopped
+    environment:
+      CONTENT_SERVICE_URL: http://content-service-nginx
+      WP_CUSTOMER_SITES_URL: http://wp-customer-sites-nginx
+      PORT: "80"
+      DOMAIN_TTL: "5m"
+    ports:
+      - "8110:80"
+    depends_on:
+      - content-service-nginx
+      - wp-customer-sites-nginx
+    networks:
+      - backend-network
+
 networks:
   backend-network:
     driver: bridge

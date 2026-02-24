@@ -135,6 +135,21 @@ services:
       # Expose port directly for local access
       - "8100:80"
 
+  router-service:
+    build:
+      target: development
+    volumes:
+      # Mount source code; restart container to pick up changes
+      - ./services/router-service:/app
+    environment:
+      CONTENT_SERVICE_URL: http://content-service-nginx
+      WP_CUSTOMER_SITES_URL: http://wp-customer-sites-nginx
+      PORT: "80"
+      DOMAIN_TTL: "1m"
+    ports:
+      # Expose port directly for local access
+      - "8110:80"
+
   localstack:
     image: localstack/localstack:latest
     container_name: backend-localstack

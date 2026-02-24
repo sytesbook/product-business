@@ -181,6 +181,22 @@ else
 fi
 
 # ============================================================================
+# 4.6. Activate Theme
+# ============================================================================
+
+log_info "Activating theme..."
+
+if su-exec www-data wp core is-installed 2>/dev/null; then
+    if su-exec www-data wp theme activate custom-sytesbook 2>/dev/null; then
+        log_info "Theme custom-sytesbook activated."
+    else
+        log_warn "Failed to activate theme custom-sytesbook."
+    fi
+else
+    log_warn "WordPress not installed, skipping theme activation"
+fi
+
+# ============================================================================
 # 5. Start PHP-FPM
 # ============================================================================
 
