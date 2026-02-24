@@ -128,21 +128,37 @@ func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, 
 			return
 		}
 
-		// Alias domain: issue a permanent redirect to the primary domain.
+		// Alias domain: issue a permanent redirect to the primary domain,
+		// normalising any trailing slash in one round-trip.
 		if entry.Redirect != "" {
-			target := "https://" + entry.Redirect + r.RequestURI
+			scheme := r.Header.Get("X-Forwarded-Proto")
+			if scheme == "" {
+				scheme = "http"
+			}
+			path := r.URL.Path
+			if path != "/" && strings.HasSuffix(path, "/") {
+				path = strings.TrimSuffix(path, "/")
+			}
+			target := scheme + "://" + entry.Redirect + path
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 			return
 		}
 
-		// Normalize path: strip trailing slash so /page-1 and /page-1/ are equivalent.
-		lookupPath := r.URL.Path
-		if lookupPath != "/" {
-			lookupPath = strings.TrimSuffix(lookupPath, "/")
+		// Redirect trailing-slash paths to their canonical no-slash form.
+		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
+			canonical := strings.TrimSuffix(r.URL.Path, "/")
+			if r.URL.RawQuery != "" {
+				canonical += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, canonical, http.StatusMovedPermanently)
+			return
 		}
 
 		// Primary domain: look up the page UID for the requested path.
-		pageUID, ok := entry.Site.Pages[lookupPath]
+		pageUID, ok := entry.Site.Pages[r.URL.Path]
 		if !ok {
 			slog.Info("page not found", "host", host, "path", r.URL.Path)
 			http.Error(w, "page not found", http.StatusNotFound)
@@ -153,7 +169,7 @@ func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, 
 		// The trailing slash is required: without it WordPress issues a redirect to add
 		// it, which would expose the internal wp-customer-sites-nginx hostname.
 		targetPath := "/" + entry.Site.SiteUID + "/" + pageUID + "/"
-		slog.Debug("proxying request", "host", host, "path", r.URL.Path, "target_path", targetPath)
+		slog.Debug("proxying request", "host", host, "path", r.URL.Path, "target", targetPath)
 
 		ctx := context.WithValue(r.Context(), targetPathKey, targetPath)
 		proxy.ServeHTTP(w, r.WithContext(ctx))
