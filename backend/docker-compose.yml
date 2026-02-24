@@ -187,6 +187,17 @@ services:
       - "traefik.http.middlewares.content-service-rewrite.replacepathregex.regex=^/v1/content-service(.*)"
       - "traefik.http.middlewares.content-service-rewrite.replacepathregex.replacement=/api/v1$$1"
       - "traefik.http.services.content-service.loadbalancer.server.port=80"
+      # Block /routing-tables from all external traffic. Internal services access
+      # content-service directly via Docker DNS and never go through Traefik.
+      # The Path() rule is more specific than PathPrefix() above so Traefik gives
+      # it higher priority automatically. The loopback-only allowlist rejects every
+      # request that arrives through the entrypoint (403), so noop@internal is used
+      # as the service since it is never actually reached.
+      - "traefik.http.routers.content-service-routing-tables.rule=Host(`api.${DOMAIN}`) && Path(`/v1/content-service/routing-tables`)"
+      - "traefik.http.routers.content-service-routing-tables.entrypoints=web"
+      - "traefik.http.routers.content-service-routing-tables.middlewares=routing-tables-ipallowlist"
+      - "traefik.http.routers.content-service-routing-tables.service=noop@internal"
+      - "traefik.http.middlewares.routing-tables-ipallowlist.ipallowlist.sourcerange=127.0.0.1/32"
     depends_on:
       - content-service-php
     networks:
