@@ -22,10 +22,10 @@ const targetPathKey contextKey = "targetPath"
 // newHandler builds the main HTTP handler for the router service.
 // It handles health checks, domain-level redirects, page path routing,
 // and reverse proxying to wp-customer-sites-nginx.
-func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, ttl time.Duration) http.Handler {
+func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, wpCustomerSitesHost string, ttl time.Duration) http.Handler {
 	// The ReverseProxy forwards requests to wp-customer-sites-nginx.
 	// The Director is responsible for rewriting the outgoing request URL.
-	// The target path (/{site-uid}/{page-uid}) is passed via request context
+	// The target path (/{site-uid}/{page-uid}/) is passed via request context
 	// to avoid mutating the original incoming request.
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
@@ -35,11 +35,75 @@ func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, 
 				req.URL.Path = path
 				req.URL.RawPath = ""
 			}
-			// X-Forwarded-Host preserves the original customer domain for any downstream use.
+			// X-Forwarded-Host preserves the original customer domain so ModifyResponse
+			// can reconstruct the correct Location URL on WordPress redirects.
 			req.Header.Set("X-Forwarded-Host", req.Host)
-			// Clear req.Host so the outgoing request uses req.URL.Host (wp-customer-sites-nginx)
-			// as the Host header. WordPress only needs the rewritten path, not the customer domain.
-			req.Host = ""
+			// Set the Host header to the WordPress WP_HOME hostname so that
+			// redirect_canonical() sees a host that matches WP_HOME and does not
+			// issue a redirect. The actual TCP connection still goes to wpTarget.Host
+			// (wp-customer-sites-nginx) via req.URL.Host — the two are independent.
+			req.Host = wpCustomerSitesHost
+		},
+		// ModifyResponse rewrites any 3xx Location header that WordPress emits using the
+		// internal wp-customer-sites-nginx hostname back to the original customer domain
+		// and customer path, so the browser never sees the internal service name.
+		// WordPress should not redirect for trailing slashes (the Director always appends one),
+		// but this handles any other redirect WordPress may issue.
+		ModifyResponse: func(resp *http.Response) error {
+			if resp.StatusCode < 300 || resp.StatusCode >= 400 {
+				return nil
+			}
+			loc := resp.Header.Get("Location")
+			if loc == "" {
+				return nil
+			}
+			locURL, err := url.Parse(loc)
+			if err != nil || locURL.Host == "" {
+				return nil
+			}
+
+			// Recover the original customer domain that Director stored.
+			customerHost := resp.Request.Header.Get("X-Forwarded-Host")
+
+			// If the redirect already targets the customer domain, nothing to do.
+			// This handles any WordPress hostname (internal service name or public
+			// WP_HOME domain) without needing to hard-code it here.
+			if customerHost == "" || locURL.Host == customerHost {
+				return nil
+			}
+
+			// Reverse-map /{site-uid}/{page-uid}[/] → customer path.
+			entry := resolveEntry(table, reconciler, customerHost, ttl)
+			if entry == nil || entry.Site == nil {
+				return nil
+			}
+
+			// Strip the /{site-uid} prefix; remainder is /{page-uid} or /{page-uid}/.
+			wpPath := strings.TrimPrefix(locURL.Path, "/"+entry.Site.SiteUID)
+			pageUID := strings.Trim(wpPath, "/")
+
+			customerPath := ""
+			for path, uid := range entry.Site.Pages {
+				if uid == pageUID {
+					customerPath = path
+					break
+				}
+			}
+			if customerPath == "" {
+				return nil
+			}
+
+			// Honour the scheme Traefik forwards (http locally, https in production).
+			scheme := resp.Request.Header.Get("X-Forwarded-Proto")
+			if scheme == "" {
+				scheme = "http"
+			}
+			resp.Header.Set("Location", (&url.URL{
+				Scheme: scheme,
+				Host:   customerHost,
+				Path:   customerPath,
+			}).String())
+			return nil
 		},
 	}
 
@@ -71,16 +135,24 @@ func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, 
 			return
 		}
 
+		// Normalize path: strip trailing slash so /page-1 and /page-1/ are equivalent.
+		lookupPath := r.URL.Path
+		if lookupPath != "/" {
+			lookupPath = strings.TrimSuffix(lookupPath, "/")
+		}
+
 		// Primary domain: look up the page UID for the requested path.
-		pageUID, ok := entry.Site.Pages[r.URL.Path]
+		pageUID, ok := entry.Site.Pages[lookupPath]
 		if !ok {
 			slog.Info("page not found", "host", host, "path", r.URL.Path)
 			http.Error(w, "page not found", http.StatusNotFound)
 			return
 		}
 
-		// Rewrite to /{site-uid}/{page-uid} and proxy to wp-customer-sites-nginx.
-		targetPath := "/" + entry.Site.SiteUID + "/" + pageUID
+		// Rewrite to /{site-uid}/{page-uid}/ and proxy to wp-customer-sites-nginx.
+		// The trailing slash is required: without it WordPress issues a redirect to add
+		// it, which would expose the internal wp-customer-sites-nginx hostname.
+		targetPath := "/" + entry.Site.SiteUID + "/" + pageUID + "/"
 		slog.Debug("proxying request", "host", host, "path", r.URL.Path, "target_path", targetPath)
 
 		ctx := context.WithValue(r.Context(), targetPathKey, targetPath)

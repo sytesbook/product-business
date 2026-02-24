@@ -1,0 +1,28 @@
+log:
+  level: INFO
+
+api:
+  dashboard: false
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      encodedCharacters:
+        # Reject all encoded special characters in path segments.
+        # Prevents path-traversal and split-view issues for backends that are not
+        # fully RFC 3986 compliant (WordPress, Laravel, Go router).
+        allowEncodedSlash: false
+        allowEncodedBackSlash: false
+        allowEncodedNullCharacter: false
+        allowEncodedSemicolon: false
+        allowEncodedPercent: false
+        allowEncodedQuestionMark: false
+        allowEncodedHash: false
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: backend-network
+  file:
+    filename: /etc/traefik/dynamic.yml

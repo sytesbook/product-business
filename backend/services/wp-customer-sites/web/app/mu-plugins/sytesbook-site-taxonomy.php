@@ -83,17 +83,22 @@ add_filter('page_link', function (string $link, int $postId): string {
 // Frontend Routing — constrain query to the correct site term
 // ============================================================================
 
+// Defense-in-depth: constrain the SQL query to pages that carry the correct
+// site term. This alone cannot guarantee isolation because WordPress's
+// pagename resolution calls get_page_by_path() before the SQL runs, which
+// pre-sets the queried object independently of any tax_query. The authoritative
+// isolation check is the template_redirect hook below.
 add_action('pre_get_posts', function (WP_Query $query): void {
     if (is_admin()) {
         return;
     }
 
     $siteUid = $query->get('site_uid');
+
     if (empty($siteUid)) {
         return;
     }
 
-    $query->set('post_type', 'page');
     $query->set('tax_query', [
         [
             'taxonomy' => 'site',
@@ -101,6 +106,41 @@ add_action('pre_get_posts', function (WP_Query $query): void {
             'terms'    => $siteUid,
         ],
     ]);
+});
+
+// ============================================================================
+// Frontend Routing — enforce site isolation at template_redirect
+// ============================================================================
+
+// template_redirect fires after all query processing but before a template is
+// loaded. get_page_by_path() (called by pagename resolution) pre-sets the
+// queried object before the SQL query runs, so tax_query alone cannot prevent
+// the wrong page from being served. Here we verify that the resolved page
+// actually carries the expected site term and force a 404 if not.
+add_action('template_redirect', function (): void {
+    $siteUid = get_query_var('site_uid');
+
+    if (empty($siteUid)) {
+        return;
+    }
+
+    $page = get_queried_object();
+    if (!$page instanceof WP_Post) {
+        return;
+    }
+
+    $terms = get_the_terms($page->ID, 'site');
+    if (!empty($terms) && !is_wp_error($terms)) {
+        $slugs = wp_list_pluck($terms, 'slug');
+        if (in_array($siteUid, $slugs, true)) {
+            return;
+        }
+    }
+
+    global $wp_query;
+    $wp_query->set_404();
+    status_header(404);
+    nocache_headers();
 });
 
 // ============================================================================

@@ -11,6 +11,7 @@ import (
 func main() {
 	contentServiceURL := getEnv("CONTENT_SERVICE_URL", "http://content-service-nginx")
 	wpCustomerSitesURL := getEnv("WP_CUSTOMER_SITES_URL", "http://wp-customer-sites-nginx")
+	wpCustomerSitesHost := getEnv("WP_CUSTOMER_SITES_HOST", "")
 	port := getEnv("PORT", "80")
 	domainTTLStr := getEnv("DOMAIN_TTL", "5m")
 
@@ -37,7 +38,7 @@ func main() {
 		}
 	}()
 
-	handler := newHandler(table, reconciler, wpTarget, domainTTL)
+	handler := newHandler(table, reconciler, wpTarget, wpCustomerSitesHost, domainTTL)
 
 	addr := ":" + port
 	slog.Info("router-service starting", "addr", addr, "domain_ttl", domainTTL)
