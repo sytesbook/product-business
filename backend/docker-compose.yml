@@ -224,6 +224,13 @@ services:
       - "traefik.http.routers.router-service.priority=1"
       - "traefik.http.routers.router-service.entrypoints=web"
       - "traefik.http.services.router-service.loadbalancer.server.port=80"
+      # API router: requests to api.{DOMAIN}/v1/router-service/... are rewritten to /api/v1/...
+      - "traefik.http.routers.router-service-api.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/v1/router-service`)"
+      - "traefik.http.routers.router-service-api.entrypoints=web"
+      - "traefik.http.routers.router-service-api.middlewares=router-service-rewrite"
+      - "traefik.http.routers.router-service-api.service=router-service"
+      - "traefik.http.middlewares.router-service-rewrite.replacepathregex.regex=^/v1/router-service(.*)"
+      - "traefik.http.middlewares.router-service-rewrite.replacepathregex.replacement=/api/v1$$1"
     depends_on:
       - content-service-nginx
       - wp-customer-sites-nginx

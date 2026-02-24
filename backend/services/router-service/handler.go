@@ -110,7 +110,7 @@ func newHandler(table *RoutingTable, reconciler *Reconciler, wpTarget *url.URL, 
 	mux := http.NewServeMux()
 
 	// Health check — returns the same JSON shape used by content-service.
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"status": map[string]int{"code": 200},
