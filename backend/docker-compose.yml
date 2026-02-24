@@ -1,7 +1,20 @@
 name: sytesbook-business-backend
 
 services:
-  db:
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infrastructure/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - backend-network
+
+  backend-db:
     image: mysql:8.4
     container_name: backend-db
     restart: unless-stopped
@@ -12,8 +25,10 @@ services:
       WP_HOME_DB_PASSWORD: ${WP_HOME_DB_PASSWORD}
       WP_CUSTOMERS_DB_USER: ${WP_CUSTOMERS_DB_USER}
       WP_CUSTOMERS_DB_PASSWORD: ${WP_CUSTOMERS_DB_PASSWORD}
+      CONTENT_DB_USER: ${CONTENT_DB_USER}
+      CONTENT_DB_PASSWORD: ${CONTENT_DB_PASSWORD}
     volumes:
-      - db_data:/var/lib/mysql
+      - backend_db_data:/var/lib/mysql
       - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - backend-network
@@ -35,10 +50,10 @@ services:
       DB_NAME: ${WP_HOME_DB_NAME}
       DB_USER: ${WP_HOME_DB_USER}
       DB_PASSWORD: ${WP_HOME_DB_PASSWORD}
-      DB_HOST: db:3306
+      DB_HOST: backend-db:3306
       WP_ENV: ${WP_HOME_ENV}
-      WP_HOME: https://home.${DOMAIN}
-      WP_SITEURL: https://home.${DOMAIN}/wp
+      WP_HOME: https://${DOMAIN}
+      WP_SITEURL: https://${DOMAIN}/wp
       # WordPress security keys
       AUTH_KEY: ${WP_HOME_AUTH_KEY}
       SECURE_AUTH_KEY: ${WP_HOME_SECURE_AUTH_KEY}
@@ -56,7 +71,7 @@ services:
     volumes:
       - wp_home_uploads:/var/www/html/web/app/uploads
     depends_on:
-      db:
+      backend-db:
         condition: service_healthy
     networks:
       - backend-network
@@ -68,8 +83,11 @@ services:
     volumes:
       - ./services/wp-home-site/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - wp_home_uploads:/var/www/html/web/app/uploads:ro
-    ports:
-      - "8080:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wp-home-site.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.wp-home-site.entrypoints=web"
+      - "traefik.http.services.wp-home-site.loadbalancer.server.port=80"
     depends_on:
       - wp-home-site-php
     networks:
@@ -86,7 +104,7 @@ services:
       DB_NAME: ${WP_CUSTOMERS_DB_NAME}
       DB_USER: ${WP_CUSTOMERS_DB_USER}
       DB_PASSWORD: ${WP_CUSTOMERS_DB_PASSWORD}
-      DB_HOST: db:3306
+      DB_HOST: backend-db:3306
       WP_ENV: ${WP_CUSTOMERS_ENV}
       WP_HOME: https://customers.${DOMAIN}
       WP_SITEURL: https://customers.${DOMAIN}/wp
@@ -107,7 +125,7 @@ services:
     volumes:
       - wp_customers_uploads:/var/www/html/web/app/uploads
     depends_on:
-      db:
+      backend-db:
         condition: service_healthy
     networks:
       - backend-network
@@ -119,19 +137,113 @@ services:
     volumes:
       - ./services/wp-customer-sites/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - wp_customers_uploads:/var/www/html/web/app/uploads:ro
-    ports:
-      - "8090:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wp-customer-sites.rule=Host(`customers.${DOMAIN}`)"
+      - "traefik.http.routers.wp-customer-sites.entrypoints=web"
+      - "traefik.http.services.wp-customer-sites.loadbalancer.server.port=80"
     depends_on:
       - wp-customer-sites-php
     networks:
       - backend-network
 
+  content-service-php:
+    build:
+      context: .
+      dockerfile: services/content-service/Dockerfile
+      target: production
+    container_name: content-service-php
+    restart: unless-stopped
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: backend-db
+      DB_PORT: "3306"
+      DB_DATABASE: ${CONTENT_DB_NAME}
+      DB_USERNAME: ${CONTENT_DB_USER}
+      DB_PASSWORD: ${CONTENT_DB_PASSWORD}
+      APP_NAME: content-service
+      APP_ENV: ${CONTENT_SERVICE_ENV}
+      APP_KEY: ${CONTENT_SERVICE_KEY}
+      APP_DEBUG: "false"
+      APP_URL: https://content.${DOMAIN}
+    depends_on:
+      backend-db:
+        condition: service_healthy
+    networks:
+      - backend-network
+
+  content-service-nginx:
+    image: nginx:alpine
+    container_name: content-service-nginx
+    restart: unless-stopped
+    volumes:
+      - ./services/content-service/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    labels:
+      - "traefik.enable=true"
+      # Requests to api.{DOMAIN}/v1/content-service/... are rewritten to /api/v1/...
+      - "traefik.http.routers.content-service.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/v1/content-service`)"
+      - "traefik.http.routers.content-service.entrypoints=web"
+      - "traefik.http.routers.content-service.middlewares=content-service-rewrite"
+      - "traefik.http.middlewares.content-service-rewrite.replacepathregex.regex=^/v1/content-service(.*)"
+      - "traefik.http.middlewares.content-service-rewrite.replacepathregex.replacement=/api/v1$$1"
+      - "traefik.http.services.content-service.loadbalancer.server.port=80"
+      # Block /routing-tables from all external traffic. Internal services access
+      # content-service directly via Docker DNS and never go through Traefik.
+      # The Path() rule is more specific than PathPrefix() above so Traefik gives
+      # it higher priority automatically. The loopback-only allowlist rejects every
+      # request that arrives through the entrypoint (403), so noop@internal is used
+      # as the service since it is never actually reached.
+      - "traefik.http.routers.content-service-routing-tables.rule=Host(`api.${DOMAIN}`) && Path(`/v1/content-service/routing-tables`)"
+      - "traefik.http.routers.content-service-routing-tables.entrypoints=web"
+      - "traefik.http.routers.content-service-routing-tables.middlewares=routing-tables-ipallowlist"
+      - "traefik.http.routers.content-service-routing-tables.service=noop@internal"
+      - "traefik.http.middlewares.routing-tables-ipallowlist.ipallowlist.sourcerange=127.0.0.1/32"
+    depends_on:
+      - content-service-php
+    networks:
+      - backend-network
+
+  router-service:
+    build:
+      context: .
+      dockerfile: services/router-service/Dockerfile
+      target: production
+    container_name: router-service
+    restart: unless-stopped
+    environment:
+      CONTENT_SERVICE_URL: http://content-service-nginx
+      WP_CUSTOMER_SITES_URL: http://wp-customer-sites-nginx
+      WP_CUSTOMER_SITES_HOST: customers.${DOMAIN}
+      PORT: "80"
+      DOMAIN_TTL: "5m"
+    labels:
+      - "traefik.enable=true"
+      # Catch-all: any domain not matched by a more specific router above.
+      # Priority 1 ensures this is always the lowest-priority route.
+      - "traefik.http.routers.router-service.rule=HostRegexp(`.+`)"
+      - "traefik.http.routers.router-service.priority=1"
+      - "traefik.http.routers.router-service.entrypoints=web"
+      - "traefik.http.services.router-service.loadbalancer.server.port=80"
+      # API router: requests to api.{DOMAIN}/v1/router-service/... are rewritten to /api/v1/...
+      - "traefik.http.routers.router-service-api.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/v1/router-service`)"
+      - "traefik.http.routers.router-service-api.entrypoints=web"
+      - "traefik.http.routers.router-service-api.middlewares=router-service-rewrite"
+      - "traefik.http.routers.router-service-api.service=router-service"
+      - "traefik.http.middlewares.router-service-rewrite.replacepathregex.regex=^/v1/router-service(.*)"
+      - "traefik.http.middlewares.router-service-rewrite.replacepathregex.replacement=/api/v1$$1"
+    depends_on:
+      - content-service-nginx
+      - wp-customer-sites-nginx
+    networks:
+      - backend-network
+
 networks:
   backend-network:
+    name: backend-network
     driver: bridge
 
 volumes:
-  db_data:
+  backend_db_data:
     driver: local
   wp_home_uploads:
     driver: local

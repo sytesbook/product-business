@@ -62,7 +62,7 @@ This document provides detailed architectural diagrams comparing the local devel
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
 │  │  │  backend-db (mysql:8.4)                                  ││ │
 │  │  │  Port: 3306 (exposed to host)                           ││ │
-│  │  │  Volume: db_data:/var/lib/mysql (persisted)             ││ │
+│  │  │  Volume: backend_db_data:/var/lib/mysql (persisted)             ││ │
 │  │  │  Databases: wp_home_site_db, wp_customer_sites_db             ││ │
 │  │  │  Init scripts: ./infrastructure/mysql/init              ││ │
 │  │  └──────────────────────────────────────────────────────────┘│ │
@@ -200,7 +200,7 @@ KEY FEATURES - Local Development:
 │  │  ┌──────────────────────────────────────────────────────────┐│ │
 │  │  │  backend-db (mysql:8.4)                                  ││ │
 │  │  │  Port: 3306 (internal only)                             ││ │
-│  │  │  Volume: db_data:/var/lib/mysql (EBS-backed)            ││ │
+│  │  │  Volume: backend_db_data:/var/lib/mysql (EBS-backed)            ││ │
 │  │  │  Databases: wp_home_site_db, wp_customer_sites_db             ││ │
 │  │  │  Environment: From GitHub Secrets                        ││ │
 │  │  │  Backups: Automated via AWS or cron                     ││ │

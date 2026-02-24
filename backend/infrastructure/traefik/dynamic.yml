@@ -1,0 +1,24 @@
+# File-based dynamic configuration for rules that cannot be expressed via Docker labels.
+# Traefik watches this file and hot-reloads when it changes.
+
+http:
+  routers:
+    # Redirect any www.{domain} to {domain} with a 301 before any service-specific
+    # router gets a chance to match. Priority 10 keeps it above the catch-all (1) but
+    # below specific Host() rules whose length-based default priority is always higher.
+    www-redirect:
+      rule: "HostRegexp(`^www\\..+`)"
+      priority: 10
+      entryPoints:
+        - web
+      middlewares:
+        - www-redirect
+      service: noop@internal
+
+  middlewares:
+    www-redirect:
+      redirectRegex:
+        # Capture everything after "www." (including path/query) and rebuild the URL.
+        regex: "^https?://www\\.(.+)"
+        replacement: "http://$1"
+        permanent: true

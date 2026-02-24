@@ -1,9 +1,37 @@
 # Local Development Configuration
-# Copy this file to docker-compose.override.yml and update with your local values
-# docker-compose.override.yml is gitignored and contains your local secrets
+# Copy this file to docker-compose.override.yml and update with your local values.
+# docker-compose.override.yml is gitignored and contains your local secrets.
+#
+# DOMAIN setup
+# ───────────────────────────────────────────────────────────────────────────────
+# Traefik routes traffic based on the DOMAIN Compose variable.
+# For local development set it in your .env file:
+#
+#   DOMAIN=business.sytesbook.test
+#
+# Then add the following entries to /etc/hosts so the .test domains resolve:
+#
+#   127.0.0.1  business.sytesbook.test
+#   127.0.0.1  www.business.sytesbook.test
+#   127.0.0.1  customers.business.sytesbook.test
+#   127.0.0.1  www.customers.business.sytesbook.test
+#   127.0.0.1  api.business.sytesbook.test
+#
+# For staging/production inject DOMAIN as a shell/CI environment variable before
+# running docker compose (the Traefik labels pick it up automatically).
 
 services:
-  db:
+  traefik:
+    # Enable the dashboard for local inspection at http://localhost:8081/dashboard/
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+    ports:
+      - "80:80"
+      - "8081:8080"  # Traefik dashboard
+
+  backend-db:
     environment:
       MYSQL_ROOT_PASSWORD: root_db_password_local
       # User credentials for init script
@@ -11,6 +39,8 @@ services:
       WP_HOME_DB_PASSWORD: local_db_password
       WP_CUSTOMERS_DB_USER: wp_customers_db_user
       WP_CUSTOMERS_DB_PASSWORD: local_db_password
+      CONTENT_DB_USER: content_db_user
+      CONTENT_DB_PASSWORD: local_db_password
     ports:
       # Expose MySQL port for local development (optional)
       - "3306:3306"
@@ -20,7 +50,7 @@ services:
     build:
       target: development
     volumes:
-      # Mount source code for live reloading
+      # Mount source code for live reloading.
       # Note: Host filesystem permissions override container permissions.
       # The entrypoint script automatically fixes uploads directory permissions on startup.
       - ./services/wp-home-site:/var/www/html
@@ -28,12 +58,12 @@ services:
       DB_NAME: wp_home_site_db
       DB_USER: wp_home_db_user
       DB_PASSWORD: local_db_password
-      DB_HOST: db:3306
+      DB_HOST: backend-db:3306
       WP_ENV: development
-      WP_HOME: http://localhost:8080
-      WP_SITEURL: http://localhost:8080/wp
-      # NOTE: Use only alphanumeric [0-9a-zA-Z] to avoid $ interpolation issues
-      # Generate your own keys at https://roots.io/salts.html (then remove special chars)
+      WP_HOME: http://${DOMAIN}
+      WP_SITEURL: http://${DOMAIN}/wp
+      # NOTE: Use only alphanumeric [0-9a-zA-Z] to avoid $ interpolation issues.
+      # Generate your own keys at https://roots.io/salts.html (then remove special chars).
       AUTH_KEY: "local-dev-auth-key-change-me"
       SECURE_AUTH_KEY: "local-dev-secure-auth-key-change-me"
       LOGGED_IN_KEY: "local-dev-logged-in-key-change-me"
@@ -56,16 +86,13 @@ services:
     volumes:
       # Mount source code for nginx to serve static files
       - ./services/wp-home-site:/var/www/html:ro
-    ports:
-      # Expose port directly for local access
-      - "8080:80"
 
   wp-customer-sites-php:
     # For local dev, use development target with volume mounts
     build:
       target: development
     volumes:
-      # Mount source code for live reloading
+      # Mount source code for live reloading.
       # Note: Host filesystem permissions override container permissions.
       # The entrypoint script automatically fixes uploads directory permissions on startup.
       - ./services/wp-customer-sites:/var/www/html
@@ -73,12 +100,12 @@ services:
       DB_NAME: wp_customer_sites_db
       DB_USER: wp_customers_db_user
       DB_PASSWORD: local_db_password
-      DB_HOST: db:3306
+      DB_HOST: backend-db:3306
       WP_ENV: development
-      WP_HOME: http://localhost:8090
-      WP_SITEURL: http://localhost:8090/wp
-      # NOTE: Use only alphanumeric [0-9a-zA-Z] to avoid $ interpolation issues
-      # Generate your own keys at https://roots.io/salts.html (then remove special chars)
+      WP_HOME: http://customers.${DOMAIN}
+      WP_SITEURL: http://customers.${DOMAIN}/wp
+      # NOTE: Use only alphanumeric [0-9a-zA-Z] to avoid $ interpolation issues.
+      # Generate your own keys at https://roots.io/salts.html (then remove special chars).
       AUTH_KEY: "local-dev-auth-key-change-me"
       SECURE_AUTH_KEY: "local-dev-secure-auth-key-change-me"
       LOGGED_IN_KEY: "local-dev-logged-in-key-change-me"
@@ -101,6 +128,62 @@ services:
     volumes:
       # Mount source code for nginx to serve static files
       - ./services/wp-customer-sites:/var/www/html:ro
+
+  content-service-php:
+    # For local dev, use development target with volume mounts
+    build:
+      target: development
+    volumes:
+      # Mount source code for live reloading
+      - ./services/content-service:/var/www/html
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: backend-db
+      DB_PORT: "3306"
+      DB_DATABASE: content_db
+      DB_USERNAME: content_db_user
+      DB_PASSWORD: local_db_password
+      APP_NAME: content-service
+      APP_ENV: local
+      # Generate with: php artisan key:generate --show
+      APP_KEY: "base64:localdevkeychangemeplease000000000000000="
+      APP_DEBUG: "true"
+      APP_URL: http://api.${DOMAIN}
+      LOG_CHANNEL: stack
+      LOG_LEVEL: debug
+
+  router-service:
+    build:
+      target: development
+    volumes:
+      # Mount source code; restart container to pick up changes
+      - ./services/router-service:/app
+    environment:
+      CONTENT_SERVICE_URL: http://content-service-nginx
+      WP_CUSTOMER_SITES_URL: http://wp-customer-sites-nginx
+      WP_CUSTOMER_SITES_HOST: customers.${DOMAIN}
+      PORT: "80"
+      DOMAIN_TTL: "1m"
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: backend-localstack
+    environment:
+      SERVICES: sns
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: eu-central-1
+    volumes:
+      # Mount init scripts; LocalStack runs ready.d/ scripts after startup
+      - ./infrastructure/localstack/init:/etc/localstack/init/ready.d:ro
     ports:
-      # Expose port directly for local access
-      - "8090:80"
+      # Expose LocalStack port for local tooling (aws CLI from host, etc.)
+      - "4566:4566"
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

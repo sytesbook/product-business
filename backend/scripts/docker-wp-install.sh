@@ -38,8 +38,14 @@ fi
 
 # Use PHP mysqli to check database connectivity (natively supports caching_sha2_password)
 # This bypasses Alpine's MariaDB client which has compatibility issues with MySQL 8.4
+#
+# mysqli_report(MYSQLI_REPORT_OFF) is required for PHP 8.1+ where mysqli throws exceptions
+# by default. Without it, connection failures (wrong credentials, host not ready, etc.)
+# throw an uncaught mysqli_sql_exception instead of populating $mysqli->connect_error,
+# which crashes the script rather than triggering the retry loop.
 until php -r "
-\$mysqli = @new mysqli('$DB_HOSTNAME', '$DB_USER', '$DB_PASSWORD', '$DB_NAME', $DB_PORT);
+mysqli_report(MYSQLI_REPORT_OFF);
+\$mysqli = new mysqli('$DB_HOSTNAME', '$DB_USER', '$DB_PASSWORD', '$DB_NAME', $DB_PORT);
 if (\$mysqli->connect_error) {
     exit(1);
 }
@@ -132,6 +138,14 @@ if [ "$WP_INSTALLED" = false ]; then
         log_info "Admin user: ${WP_ADMIN_USER}"
         log_info "Admin email: ${WP_ADMIN_EMAIL}"
         log_info "Site URL: ${WP_HOME}"
+
+        # Remove default content created by WordPress during installation
+        log_info "Removing default WordPress content..."
+        su-exec www-data wp post delete \
+            $(su-exec www-data wp post list --post_type=page --name=sample-page --post_status=any --field=ID 2>/dev/null) \
+            $(su-exec www-data wp post list --post_type=post --name=hello-world --post_status=any --field=ID 2>/dev/null) \
+            --force 2>/dev/null || true
+        log_info "Default content removed."
     else
         log_error "WordPress installation failed!"
         exit 1
@@ -146,30 +160,40 @@ fi
 
 log_info "Configuring WordPress permalink structure..."
 
-# Check if WordPress is installed before configuring permalinks
+# Always apply permalink structure and flush rewrite rules on every startup so
+# that custom rewrite rules registered by MU plugins (e.g. sytesbook-site-taxonomy,
+# which provides /{site-uid}/{page-uid}/ routing for pages) are always up to date
+# without requiring manual intervention after deployments.
+#
+# Note: --hard is intentionally omitted because this service runs behind Nginx
+# and does not use .htaccess.
 if su-exec www-data wp core is-installed 2>/dev/null; then
-    # Get current permalink structure
-    CURRENT_STRUCTURE=$(su-exec www-data wp option get permalink_structure 2>/dev/null || echo "")
-
-    if [ -z "$CURRENT_STRUCTURE" ]; then
-        log_info "Setting permalink structure to post name format..."
-
-        # Set pretty permalinks (post name structure)
-        # This enables REST API at /wp-json/ paths
-        if su-exec www-data wp rewrite structure '/%postname%/' --hard 2>/dev/null; then
-            log_info "Permalink structure set successfully!"
-
-            # Flush rewrite rules to ensure they're active
-            su-exec www-data wp rewrite flush 2>/dev/null
-            log_info "Rewrite rules flushed!"
-        else
-            log_warn "Failed to set permalink structure, REST API may use query string format"
-        fi
+    if su-exec www-data wp rewrite structure '/%postname%/' 2>/dev/null; then
+        log_info "Permalink structure set to post name format."
     else
-        log_info "Permalink structure already configured: ${CURRENT_STRUCTURE}"
+        log_warn "Failed to set permalink structure, REST API may use query string format"
     fi
+
+    su-exec www-data wp rewrite flush 2>/dev/null
+    log_info "Rewrite rules flushed."
 else
     log_warn "WordPress not installed, skipping permalink configuration"
+fi
+
+# ============================================================================
+# 4.6. Activate Theme
+# ============================================================================
+
+log_info "Activating theme..."
+
+if su-exec www-data wp core is-installed 2>/dev/null; then
+    if su-exec www-data wp theme activate custom-sytesbook 2>/dev/null; then
+        log_info "Theme custom-sytesbook activated."
+    else
+        log_warn "Failed to activate theme custom-sytesbook."
+    fi
+else
+    log_warn "WordPress not installed, skipping theme activation"
 fi
 
 # ============================================================================
