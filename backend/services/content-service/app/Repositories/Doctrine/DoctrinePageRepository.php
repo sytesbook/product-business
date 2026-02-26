@@ -3,6 +3,7 @@
 namespace App\Repositories\Doctrine;
 
 use App\Entities\Page;
+use App\Entities\Site;
 use App\Repositories\PageRepositoryInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -20,6 +21,11 @@ class DoctrinePageRepository implements PageRepositoryInterface
     public function find(string $uid): ?Page
     {
         return $this->repository->find($uid);
+    }
+
+    public function findByPathAndSite(string $path, Site $site): ?Page
+    {
+        return $this->repository->findOneBy(['path' => $path, 'site' => $site]);
     }
 
     public function save(Page $page): void

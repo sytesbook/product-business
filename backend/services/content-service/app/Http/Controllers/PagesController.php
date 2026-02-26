@@ -63,10 +63,17 @@ class PagesController
 
         $data = $validator->validated();
 
+        $title = $data['data']['body']['title'];
+        $path  = $data['data']['body']['path'];
+
+        if ($this->pageRepository->findByPathAndSite($path, $site) !== null) {
+            return response()->json(['message' => 'Path is already taken for this site.'], 400);
+        }
+
         $page = new Page(
             bin2hex(random_bytes(8)),
-            $data['data']['body']['title'],
-            $data['data']['body']['path'],
+            $title,
+            $path,
             $site,
         );
 
@@ -105,8 +112,16 @@ class PagesController
 
         $data = $validator->validated();
 
-        $page->setTitle($data['data']['body']['title']);
-        $page->setPath($data['data']['body']['path']);
+        $title = $data['data']['body']['title'];
+        $path  = $data['data']['body']['path'];
+
+        $existing = $this->pageRepository->findByPathAndSite($path, $site);
+        if ($existing !== null && $existing->getUid() !== $pageUid) {
+            return response()->json(['message' => 'Path is already taken for this site.'], 400);
+        }
+
+        $page->setTitle($title);
+        $page->setPath($path);
         $this->pageRepository->save($page);
 
         return response()->json([

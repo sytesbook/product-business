@@ -42,6 +42,13 @@ php artisan migrate --force
 
 echo "Migrations completed successfully!"
 
+# Relay the Laravel log file to Docker stderr so logs appear in `docker compose up`.
+# PHP-FPM's internal log routing is unreliable in Alpine; writing to a plain file
+# and tailing it sidesteps the entire php-fpm error_log mechanism.
+touch /tmp/phpfpm-errors
+chmod 666 /tmp/phpfpm-errors
+tail -f /tmp/phpfpm-errors >&2 &
+
 # Start PHP-FPM
 echo "Starting PHP-FPM..."
 exec php-fpm --nodaemonize --fpm-config /usr/local/etc/php-fpm.conf
