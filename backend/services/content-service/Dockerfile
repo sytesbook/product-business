@@ -93,6 +93,8 @@ RUN { \
         echo 'pm.start_servers = 5'; \
         echo 'pm.min_spare_servers = 5'; \
         echo 'pm.max_spare_servers = 35'; \
+        echo 'catch_workers_output = yes'; \
+        echo 'decorate_workers_output = no'; \
     } > /usr/local/etc/php-fpm.d/zz-docker.conf
 
 # Set working directory
@@ -151,6 +153,13 @@ RUN { \
         echo 'memory_limit=256M'; \
         echo 'max_execution_time=60'; \
     } > /usr/local/etc/php/conf.d/settings.ini
+
+# Configure PHP-FPM
+RUN { \
+        echo '[www]'; \
+        echo 'catch_workers_output = yes'; \
+        echo 'decorate_workers_output = no'; \
+    } > /usr/local/etc/php-fpm.d/zz-docker.conf
 
 # Copy entrypoint script
 COPY scripts/docker-laravel-start.sh /usr/local/bin/docker-laravel-start.sh

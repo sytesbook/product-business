@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Queries;
+namespace App\Queries\Doctrine;
 
+use App\Queries\RoutingTablesQuery;
 use Doctrine\ORM\EntityManagerInterface;
 
 class DoctrineRoutingTablesQuery implements RoutingTablesQuery
