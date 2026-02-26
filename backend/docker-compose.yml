@@ -166,6 +166,8 @@ services:
       APP_KEY: ${CONTENT_SERVICE_KEY}
       APP_DEBUG: "false"
       APP_URL: https://content.${DOMAIN}
+      LOG_CHANNEL: ${CONTENT_SERVICE_LOG_CHANNEL}
+      LOG_LEVEL: ${CONTENT_SERVICE_LOG_LEVEL}
     depends_on:
       backend-db:
         condition: service_healthy

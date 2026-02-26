@@ -45,6 +45,11 @@ RUN composer install \
 # Copy application code
 COPY services/content-service/ .
 
+# Remove any bootstrap cache that may have been committed or generated locally.
+# If bootstrap/cache/config.php exists, Laravel ignores all config/*.php files,
+# making every logging or other config change invisible at runtime.
+RUN rm -f bootstrap/cache/*.php
+
 # Dump optimized autoloader
 RUN composer dump-autoload --optimize --no-dev
 

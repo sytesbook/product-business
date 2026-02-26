@@ -1,8 +1,10 @@
 <?php
 
-namespace App\Repositories;
+namespace App\Repositories\Doctrine;
 
 use App\Entities\Domain;
+use App\Entities\Site;
+use App\Repositories\DomainRepositoryInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 
@@ -24,6 +26,11 @@ class DoctrineDomainRepository implements DomainRepositoryInterface
     public function findByDomain(string $domain): ?Domain
     {
         return $this->repository->findOneBy(['domain' => $domain]);
+    }
+
+    public function findPrimaryBySite(Site $site): ?Domain
+    {
+        return $this->repository->findOneBy(['site' => $site, 'isPrimary' => true]);
     }
 
     public function save(Domain $domain): void
