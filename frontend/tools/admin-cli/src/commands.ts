@@ -12,8 +12,27 @@ import {
 import { request } from './http.js';
 import { display, displayError, displaySuccess, printError, ansi } from './output.js';
 
+class AbortError extends Error {
+  constructor() {
+    super('Interrupted');
+  }
+}
+
 function ask(rl: RlInterface, prompt: string): Promise<string> {
-  return new Promise((resolve) => rl.question(prompt, resolve));
+  return new Promise((resolve, reject) => {
+    function onLine(answer: string): void {
+      rl.removeListener('SIGINT', onSigint);
+      resolve(answer);
+    }
+    function onSigint(): void {
+      rl.removeListener('line', onLine);
+      process.stdout.write('\n');
+      reject(new AbortError());
+    }
+    rl.once('line', onLine);
+    rl.once('SIGINT', onSigint);
+    process.stdout.write(prompt);
+  });
 }
 
 export async function dispatch(input: string, rl: RlInterface, session: Session): Promise<void> {
@@ -21,6 +40,23 @@ export async function dispatch(input: string, rl: RlInterface, session: Session)
   const cmd = parts[0] ?? '';
   const args = parts.slice(1);
 
+  try {
+    await dispatchCommand(cmd, args, rl, session);
+  } catch (e) {
+    if (e instanceof AbortError) {
+      console.log('Cancelled.');
+      return;
+    }
+    throw e;
+  }
+}
+
+async function dispatchCommand(
+  cmd: string,
+  args: string[],
+  rl: RlInterface,
+  session: Session,
+): Promise<void> {
   switch (cmd) {
     case 'help':
       cmdHelp(session);
