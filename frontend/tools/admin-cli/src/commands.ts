@@ -171,42 +171,47 @@ function cmdLs(session: Session): void {
   const controllers = invokableControllers(session);
   let printed = false;
 
+  console.log('');
+
   if (kind === 'collection') {
     const url = currentUrl(session);
     const knownIds = session.knownIds.get(url) ?? [];
     if (knownIds.length > 0) {
-      console.log(`${ansi.bold('Documents:')} (${knownIds.length})`);
+      console.log(`  ${ansi.bold('Documents:')} (${knownIds.length})`);
       for (const id of knownIds) {
-        console.log(`  ${id}  ${ansi.dim('[document]')}`);
+        console.log(`    ${id}  ${ansi.dim('[document]')}`);
       }
       printed = true;
     } else {
       console.log(
-        ansi.dim('Documents not yet loaded — run "index" to discover document IDs.'),
+        `  ${ansi.dim('Documents not yet loaded — run "index" to discover document IDs.')}`,
       );
       printed = true;
     }
   } else if (Object.keys(children).length > 0) {
+    console.log(`  ${ansi.bold('Children:')}`);
     for (const [name, child] of Object.entries(children)) {
       const desc = child.description ? `  ${ansi.dim('—')} ${ansi.dim(child.description)}` : '';
-      console.log(`  ${name}  ${ansi.dim(`[${child.archetype}]`)}${desc}`);
+      console.log(`    ${name}  ${ansi.dim(`[${child.archetype}]`)}${desc}`);
     }
     printed = true;
   }
 
   if (Object.keys(controllers).length > 0) {
     if (printed) console.log('');
-    console.log(`${ansi.bold('Actions:')}`);
+    console.log(`  ${ansi.bold('Actions:')}`);
     for (const [name, ctrl] of Object.entries(controllers)) {
       const desc = ctrl.description ? `  ${ansi.dim('—')} ${ansi.dim(ctrl.description)}` : '';
-      console.log(`  ${name}  ${ansi.dim('[controller]')}${desc}`);
+      console.log(`    ${name}  ${ansi.dim('[controller]')}${desc}`);
     }
     printed = true;
   }
 
   if (!printed) {
-    console.log(ansi.dim('(no children)'));
+    console.log(`  ${ansi.dim('(no children)')}`);
   }
+
+  console.log('');
 }
 
 function cmdPwd(session: Session): void {

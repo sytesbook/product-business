@@ -16,7 +16,9 @@ export function display(data: unknown, mode: 'human' | 'json'): void {
   }
 
   if (typeof data !== 'object' || data === null) {
-    console.log(String(data));
+    console.log('');
+    console.log(`  ${String(data)}`);
+    console.log('');
     return;
   }
 
@@ -64,18 +66,22 @@ function displayDocument(obj: Record<string, unknown>): void {
   const width = Math.max(...sections.flatMap((s) => s.map((l) => l.length)));
   const separator = `+-${'-'.repeat(width)}-+`;
 
-  console.log(separator);
+  console.log('');
+  console.log(`  ${separator}`);
   for (const section of sections) {
     for (const line of section) {
-      console.log(`| ${line.padEnd(width)} |`);
+      console.log(`  | ${line.padEnd(width)} |`);
     }
-    console.log(separator);
+    console.log(`  ${separator}`);
   }
+  console.log('');
 }
 
 function displayCollection(items: unknown[]): void {
   if (items.length === 0) {
-    console.log(ansi.dim('(empty collection)'));
+    console.log('');
+    console.log(`  ${ansi.dim('(empty collection)')}`);
+    console.log('');
     return;
   }
 
@@ -114,18 +120,20 @@ function displayCollection(items: unknown[]): void {
     columns.map((col, i) => ansi.bold(col.padEnd(widths[i] ?? col.length))).join(' | ') +
     ' |';
 
-  console.log(separator);
-  console.log(headerLine);
-  console.log(separator);
+  console.log('');
+  console.log(`  ${separator}`);
+  console.log(`  ${headerLine}`);
+  console.log(`  ${separator}`);
 
   // Data rows
   for (const row of rows) {
     const line = '| ' + row.map((cell, i) => cell.padEnd(widths[i] ?? cell.length)).join(' | ') + ' |';
-    console.log(line);
+    console.log(`  ${line}`);
   }
-  console.log(separator);
+  console.log(`  ${separator}`);
 
-  console.log(ansi.dim(`\n${items.length} item(s)`));
+  console.log(`  ${ansi.dim(`${items.length} item(s)`)}`);
+  console.log('');
 }
 
 export function displayError(result: HttpResult, mode: 'human' | 'json'): void {
@@ -135,19 +143,25 @@ export function displayError(result: HttpResult, mode: 'human' | 'json'): void {
   }
 
   const msg = extractErrorMessage(result.data);
+  console.error('');
   if (result.status === 0) {
-    console.error(`${ansi.red('✗')} ${msg}`);
+    console.error(`  ${ansi.red('✗')} ${msg}`);
   } else {
-    console.error(`${ansi.red(`✗ HTTP ${result.status}`)}: ${msg}`);
+    console.error(`  ${ansi.red(`✗ HTTP ${result.status}`)}: ${msg}`);
   }
+  console.error('');
 }
 
 export function displaySuccess(message: string): void {
-  console.log(`${ansi.green('✓')} ${message}`);
+  console.log('');
+  console.log(`  ${ansi.green('✓')} ${message}`);
+  console.log('');
 }
 
 export function printError(message: string): void {
-  console.error(`${ansi.red('✗')} ${message}`);
+  console.error('');
+  console.error(`  ${ansi.red('✗')} ${message}`);
+  console.error('');
 }
 
 function extractErrorMessage(data: unknown): string {
