@@ -1,0 +1,52 @@
+name: Content Service
+baseUrl: http://api.business.sytesbook.test/v1/content-service
+resources:
+  sites:
+    archetype: collection
+    description: Manage sites
+    dynamicChild:
+      archetype: document
+      description: A site resource
+      fields:
+        title:
+          label: Title
+          description: Max 255 characters
+          required: true
+      staticChildren:
+        pages:
+          archetype: collection
+          description: Manage pages for this site
+          dynamicChild:
+            archetype: document
+            description: A page resource
+            fields:
+              title:
+                label: Title
+                required: true
+              path:
+                label: Path
+                description: URL path, must be unique per site (e.g. /about)
+                required: true
+        domains:
+          archetype: collection
+          description: Manage domains for this site
+          dynamicChild:
+            archetype: document
+            description: A domain resource
+            fields:
+              domain:
+                label: Domain
+                description: Fully qualified domain name (e.g. example.com)
+                required: true
+            staticChildren:
+              set-as-primary:
+                archetype: controller
+                description: Set this domain as the primary domain for the site
+                requiresConfirmation: true
+        activate:
+          archetype: controller
+          description: Activate the site and make it publicly accessible
+        deactivate:
+          archetype: controller
+          description: Deactivate the site
+          requiresConfirmation: true
